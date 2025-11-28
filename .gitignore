@@ -6,6 +6,7 @@ node_modules/
 !config.js
 *.log
 *.ps1
+!test-all.ps1
 *.py
 scripts/
 public/
