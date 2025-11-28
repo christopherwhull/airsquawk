@@ -7,6 +7,7 @@ const axios = require('axios');
 const morgan = require('morgan');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
+const config = require('./config');
 const { getAirlineDatabase, getAircraftTypesDatabase } = require('./lib/databases');
 const { registration_from_hexid } = require('./lib/registration');
 const { setupApiRoutes } = require('./lib/api-routes');
@@ -19,22 +20,19 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
-const PORT = 3002;
+// --- Load Configuration ---
+const PORT = config.server.port;
+const PIAWARE_URL = config.dataSource.piAwareUrl;
+const BUCKET_NAME = config.buckets.readBucket;
+const WRITE_BUCKET_NAME = config.buckets.writeBucket;
+const STATE_FILE = path.join(__dirname, config.state.stateFile);
 
-// --- Configurations ---
-const PIAWARE_URL = 'http://192.168.0.178:8080/data/aircraft.json';
 const s3 = new S3Client({
-    endpoint: 'http://localhost:9000',
-    region: 'us-east-1',
-    credentials: {
-        accessKeyId: 'minioadmin',
-        secretAccessKey: 'minioadmin123',
-    },
-    forcePathStyle: true,
+    endpoint: config.s3.endpoint,
+    region: config.s3.region,
+    credentials: config.s3.credentials,
+    forcePathStyle: config.s3.forcePathStyle,
 });
-const BUCKET_NAME = 'aircraft-data'; // For reading
-const WRITE_BUCKET_NAME = 'aircraft-data-new'; // For writing
-const STATE_FILE = path.join(__dirname, 'dashboard-state.json');
 
 // --- Global Cache for S3 Operations and Stats ---
 let globalCache = {
@@ -64,8 +62,8 @@ let runningPositionCount = 0;
 let trackerStartTime = Date.now();
 let receiver_lat = 0.0, receiver_lon = 0.0;
 
-const POSITION_RETENTION_MS = 24 * 60 * 60 * 1000; // 24 hours
-const GAP_MS = 5 * 60 * 1000; // 5 minutes gap to close flight
+const POSITION_RETENTION_MS = config.retention.positionRetentionMs;
+const GAP_MS = config.retention.gapMs;
 
 // --- Reception Records for Visualization ---
 let maxSlantRangeRecord = null; // All-time longest slant range
@@ -200,8 +198,8 @@ function generateHeatmapData() {
 // --- Middleware ---
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
-const accessLogStream = fs.createWriteStream(path.join(__dirname, 'access.log'), { flags: 'a' });
-app.use(morgan('combined', { stream: accessLogStream }));
+const accessLogStream = fs.createWriteStream(path.join(__dirname, config.logging.accessLogFile), { flags: 'a' });
+app.use(morgan(config.logging.format, { stream: accessLogStream }));
 
 // --- API Routes (will be set up in initialize()) ---
 
@@ -1285,19 +1283,19 @@ async function initialize() {
     runAirlineAgg();
     runSquawkAgg();
     runHistoricalAgg();
-    setInterval(runAirlineAgg, 5 * 60 * 1000); // every 5 minutes
-    setInterval(runSquawkAgg, 5 * 60 * 1000); // every 5 minutes
-    setInterval(runHistoricalAgg, 30 * 60 * 1000); // every 30 minutes
+    setInterval(runAirlineAgg, config.backgroundJobs.aggregateAirlinesInterval);
+    setInterval(runSquawkAgg, config.backgroundJobs.aggregateSquawkInterval);
+    setInterval(runHistoricalAgg, config.backgroundJobs.aggregateHistoricalInterval);
 
-    setInterval(fetchData, 1000);
-    setInterval(saveState, 30000); // Save state every 30 seconds
-    setInterval(saveAircraftDataToS3, 60000); // Save aircraft data to S3 every 60 seconds
-    setInterval(buildFlightsFromS3, 120000); // Build flights from S3 every 2 minutes
-    setInterval(buildHourlyPositionsFromS3, 300000); // Build hourly positions every 5 minutes
+    setInterval(fetchData, config.backgroundJobs.fetchDataInterval);
+    setInterval(saveState, config.backgroundJobs.saveStateInterval);
+    setInterval(saveAircraftDataToS3, config.backgroundJobs.saveAircraftDataInterval);
+    setInterval(buildFlightsFromS3, config.backgroundJobs.buildFlightsInterval);
+    setInterval(buildHourlyPositionsFromS3, config.backgroundJobs.buildHourlyPositionsInterval);
     
     // Initial builds
-    setTimeout(() => buildFlightsFromS3(), 5000); // Run first build after 5 seconds
-    setTimeout(() => buildHourlyPositionsFromS3(), 10000); // Run first hourly aggregation after 10 seconds
+    setTimeout(() => buildFlightsFromS3(), config.initialJobDelays.buildFlightsDelay);
+    setTimeout(() => buildHourlyPositionsFromS3(), config.initialJobDelays.buildHourlyPositionsDelay);
 }
 
 initialize();
