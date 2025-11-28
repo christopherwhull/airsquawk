@@ -36,8 +36,8 @@ module.exports = {
 
     // --- State Management ---
     state: {
-        stateFile: process.env.STATE_FILE || './dashboard-state.json',
-        lastDailyFlightBuildFile: './.last-daily-flight-build',
+        stateFile: process.env.STATE_FILE || 'dashboard-state.json',
+        lastDailyFlightBuildFile: '.last-daily-flight-build',
     },
 
     // --- Time Windows and Retention ---
