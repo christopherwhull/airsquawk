@@ -1,6 +1,6 @@
 {
   "name": "aircraft-dashboard-new",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A new aircraft tracking dashboard",
   "main": "server.js",
   "scripts": {

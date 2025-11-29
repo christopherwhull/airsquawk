@@ -11,7 +11,7 @@ const config = require('./config');
 const { getAirlineDatabase, getAircraftTypesDatabase } = require('./lib/databases');
 const { registration_from_hexid } = require('./lib/registration');
 const { setupApiRoutes } = require('./lib/api-routes');
-const { computeAirlineStatsData, computeSquawkTransitionsData, computeHistoricalStatsData } = require('./lib/aggregators');
+const { computeAirlineStatsData, computeSquawkTransitionsData, computeHistoricalStatsData, remakeHourlyRollup } = require('./lib/aggregators');
 const logger = require('./lib/logger');
 const { listS3Files, downloadAndParseS3File } = require('./lib/s3-helpers');
 const PositionCache = require('./lib/position-cache');
@@ -47,15 +47,74 @@ let globalCache = {
 };
 
 // --- Position Cache (7 days of historical data in memory) ---
-const positionCache = new PositionCache(s3, {
-    read: BUCKET_NAME,
-    write: WRITE_BUCKET_NAME
-});
+const positionCache = new PositionCache(s3, 
+    {
+        read: BUCKET_NAME,
+        write: WRITE_BUCKET_NAME
+    },
+    {
+        onLoadComplete: (positions) => {
+            // Populate live memory with last 24 hours from cache
+            const twentyFourHoursAgo = Date.now() - (24 * 60 * 60 * 1000);
+            const recentPositions = positions.filter(p => p.timestamp >= twentyFourHoursAgo);
+            
+            logger.info(`[Server] Populating live memory with ${recentPositions.length} positions from cache`);
+            
+            // Populate positionHistory
+            positionHistory = recentPositions.map(p => ({
+                hex: p.hex,
+                callsign: p.callsign || '',
+                lat: p.lat,
+                lon: p.lon,
+                alt: p.alt,
+                gs: p.gs,
+                timestamp: p.timestamp,
+                rssi: p.rssi,
+                squawk: p.squawk
+            }));
+            
+            // Populate activeFlights from recent positions (last hour)
+            const oneHourAgo = Date.now() - (60 * 60 * 1000);
+            const veryRecentPositions = positions.filter(p => p.timestamp >= oneHourAgo);
+            
+            // Group by hex and create flight records
+            const flightsByHex = {};
+            for (const pos of veryRecentPositions) {
+                if (!flightsByHex[pos.hex]) {
+                    flightsByHex[pos.hex] = {
+                        hex: pos.hex,
+                        callsign: pos.callsign || '',
+                        firstSeen: pos.timestamp,
+                        lastSeen: pos.timestamp,
+                        positions: []
+                    };
+                }
+                const flight = flightsByHex[pos.hex];
+                flight.firstSeen = Math.min(flight.firstSeen, pos.timestamp);
+                flight.lastSeen = Math.max(flight.lastSeen, pos.timestamp);
+                flight.positions.push(pos);
+            }
+            
+            // Add to activeFlights
+            for (const hex in flightsByHex) {
+                const flight = flightsByHex[hex];
+                if (flight.positions.length > 0) {
+                    activeFlights[hex] = flight;
+                }
+            }
+            
+            logger.info(`[Server] Live memory populated: ${positionHistory.length} positions, ${Object.keys(activeFlights).length} active flights`);
+            
+            // Save aggregated stats to S3 now that cache is loaded
+            saveAggregatedStatsToS3().catch(err => logger.error('[Server] Error saving aggregated stats after cache load:', err));
+        }
+    }
+);
 
 // --- In-memory state ---
 let aircraftTracking = {}; // Current active aircraft (1 minute window)
-let activeFlights = {}; // Active flights in progress (keyed by ICAO hex)
-let positionHistory = []; // All positions from last 24 hours
+let activeFlights = {}; // Active flights in progress (keyed by ICAO hex) - will be populated from cache
+let positionHistory = []; // All positions from last 24 hours - will be populated from cache
 let squawkTransitions = []; // Squawk code changes
 let lastSquawkSeen = {}; // Track last squawk per aircraft
 let runningPositionCount = 0;
@@ -297,6 +356,99 @@ async function saveAircraftDataToS3() {
     }
 }
 
+async function saveAggregatedStatsToS3() {
+    try {
+        const now = new Date();
+        const year = now.getUTCFullYear();
+        const month = (now.getUTCMonth() + 1).toString().padStart(2, '0');
+        const day = now.getUTCDate().toString().padStart(2, '0');
+        const hours = now.getUTCHours().toString().padStart(2, '0');
+        
+        const fileName = `aggregated/hourly_stats_${year}${month}${day}_${hours}.json`;
+        
+        // Try to download existing file
+        let existingData = {
+            aircraft: new Set(),
+            flights: new Set(),
+            airlines: new Set()
+        };
+        
+        try {
+            const existing = await downloadAndParseS3File(s3, WRITE_BUCKET_NAME, fileName);
+            if (existing) {
+                if (Array.isArray(existing.aircraft)) {
+                    existing.aircraft.forEach(hex => existingData.aircraft.add(hex));
+                }
+                if (Array.isArray(existing.flights)) {
+                    existing.flights.forEach(flight => existingData.flights.add(flight));
+                }
+                if (Array.isArray(existing.airlines)) {
+                    existing.airlines.forEach(airline => existingData.airlines.add(airline));
+                }
+                logger.debug(`Loaded existing aggregated stats: ${existingData.aircraft.size} aircraft, ${existingData.flights.size} flights, ${existingData.airlines.size} airlines`);
+            }
+        } catch (err) {
+            // File doesn't exist yet, start fresh
+            logger.debug(`No existing aggregated stats file, creating new one: ${fileName}`);
+        }
+        
+        // Collect unique aircraft from position history
+        positionHistory.forEach(pos => {
+            if (pos.hex) existingData.aircraft.add(pos.hex);
+            if (pos.callsign && pos.callsign.trim()) {
+                const callsign = pos.callsign.trim();
+                existingData.flights.add(callsign);
+                // Extract airline code (skip N-numbers which are tail numbers, not airline callsigns)
+                if (callsign.length >= 3 && !callsign.startsWith('N')) {
+                    existingData.airlines.add(callsign.substring(0, 3).toUpperCase());
+                }
+            }
+        });
+        
+        // Also add from active flights
+        Object.values(activeFlights).forEach(flight => {
+            if (flight.hex) existingData.aircraft.add(flight.hex);
+            if (flight.callsign && flight.callsign.trim()) {
+                const callsign = flight.callsign.trim();
+                existingData.flights.add(callsign);
+                // Extract airline code (skip N-numbers which are tail numbers, not airline callsigns)
+                if (callsign.length >= 3 && !callsign.startsWith('N')) {
+                    existingData.airlines.add(callsign.substring(0, 3).toUpperCase());
+                }
+            }
+        });
+        
+        const aggregatedData = {
+            timestamp: now.toISOString(),
+            aircraft: Array.from(existingData.aircraft).sort(),
+            flights: Array.from(existingData.flights).sort(),
+            airlines: Array.from(existingData.airlines).sort(),
+            counts: {
+                aircraft: existingData.aircraft.size,
+                flights: existingData.flights.size,
+                airlines: existingData.airlines.size,
+                positions: positionHistory.length
+            }
+        };
+        
+        const fileContent = JSON.stringify(aggregatedData);
+        
+        const command = new PutObjectCommand({
+            Bucket: WRITE_BUCKET_NAME,
+            Key: fileName,
+            Body: fileContent,
+            ContentType: 'application/json'
+        });
+        
+        await s3.send(command);
+        globalCache.s3Writes = (globalCache.s3Writes || 0) + 1;
+        logger.info(`Saved hourly aggregated stats: ${existingData.aircraft.size} aircraft, ${existingData.flights.size} flights, ${existingData.airlines.size} airlines to ${fileName}`);
+    } catch (error) {
+        globalCache.s3Errors = (globalCache.s3Errors || 0) + 1;
+        logger.error('Failed to save aggregated stats to S3:', error);
+    }
+}
+
 async function loadState() {
     try {
         if (fs.existsSync(STATE_FILE)) {
@@ -429,7 +581,7 @@ async function buildHourlyPositionsFromS3() {
                 
                 if (pos.callsign) {
                     hourlyAggregation.unique_callsigns.add(pos.callsign);
-                    const airlineCode = pos.callsign.substring(0, 3).toUpperCase();
+                    const airlineCode = pos.callsign.startsWith('N') ? null : pos.callsign.substring(0, 3).toUpperCase();
                     if (!hourlyAggregation.airlines[airlineCode]) {
                         hourlyAggregation.airlines[airlineCode] = 0;
                     }
@@ -548,7 +700,9 @@ async function buildFlightsFromS3() {
                     allRecords.push({
                         hex,
                         ident: (r.flight || r.Ident || r.ident || '').toString().trim(),
-                        registration: (r.r || r.registration || r.Reg || '').toString().trim(),
+                        registration: (r.Registration || r.r || r.registration || r.Reg || '').toString().trim(),
+                        airline: (r.Airline || '').toString().trim(),
+                        type: (r.aircraft_type || r.t || r.type || r.Type || '').toString().trim(),
                         ts,
                         lat: parseFloat(lat),
                         lon: parseFloat(lon),
@@ -622,7 +776,7 @@ async function buildFlightsFromS3() {
         // Enrich with airline data
         const airlineDb = await getAirlineDatabase(s3, BUCKET_NAME);
         for (const fl of [...flights, ...activeFlights]) {
-            const airlineCode = fl.callsign.substring(0, 3).toUpperCase();
+            const airlineCode = fl.callsign.startsWith('N') ? null : fl.callsign.substring(0, 3).toUpperCase();
             fl.airline_code = airlineCode;
             fl.airline_name = (airlineDb && airlineDb[airlineCode]) ? (airlineDb[airlineCode].name || airlineDb[airlineCode]) : '';
         }
@@ -712,29 +866,30 @@ async function buildFlightsFromS3() {
 
 function summarizeFlightData(recs) {
     if (!recs || recs.length === 0) return null;
-    
+
     const start = recs[0];
     const end = recs[recs.length - 1];
     const maxAlt = recs.map(r => r.alt).filter(a => a != null).reduce((m, v) => Math.max(m, v), null);
     const maxSpd = recs.map(r => r.spd).filter(s => s != null).reduce((m, v) => Math.max(m, v), null);
-    
-    // Find most common ident
-    const idents = recs.map(r => r.ident).filter(Boolean);
-    const identCounts = {};
-    for (const id of idents) {
-        identCounts[id] = (identCounts[id] || 0) + 1;
-    }
-    let callsign = '';
-    if (Object.keys(identCounts).length > 0) {
-        callsign = Object.entries(identCounts).sort((a, b) => b[1] - a[1])[0][0];
-    }
-    
-    const registration = recs.map(r => r.registration).filter(Boolean).pop() || '';
-    
+
+    // Helper to find the most common non-empty value in an array
+    const mostCommon = (arr) => {
+        if (!arr.length) return '';
+        const counts = arr.reduce((acc, val) => {
+            acc[val] = (acc[val] || 0) + 1;
+            return acc;
+        }, {});
+        return Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+    };
+
+    const callsign = mostCommon(recs.map(r => r.ident).filter(Boolean));
+    const registration = mostCommon(recs.map(r => r.registration).filter(Boolean)) || registration_from_hexid(start.hex) || 'N/A';
+    const airline = mostCommon(recs.map(r => r.airline).filter(Boolean));
+    const type = mostCommon(recs.map(r => r.type).filter(Boolean));
+
     // Find a distinct end position if we have multiple records with different coordinates
     let endForCoords = end;
     if (recs.length > 1) {
-        // Look backwards for a record with different coordinates than start
         for (let i = recs.length - 1; i >= 0; i--) {
             if (recs[i].lat !== start.lat || recs[i].lon !== start.lon) {
                 endForCoords = recs[i];
@@ -757,6 +912,8 @@ function summarizeFlightData(recs) {
         icao: start.hex,
         callsign,
         registration,
+        airline,
+        type,
         start_time: new Date(start.ts).toISOString(),
         end_time: new Date(end.ts).toISOString(),
         start_ts: start.ts,
@@ -809,6 +966,7 @@ async function saveFlightsToS3(flights, key) {
             icao: fl.icao,
             callsign: fl.callsign,
             registration: fl.registration,
+            type: fl.type,
             start_time: fl.start_time,
             end_time: fl.end_time,
             duration_min: ((fl.end_ts - fl.start_ts) / 60000).toFixed(2),
@@ -1292,10 +1450,12 @@ async function initialize() {
     setInterval(saveAircraftDataToS3, config.backgroundJobs.saveAircraftDataInterval);
     setInterval(buildFlightsFromS3, config.backgroundJobs.buildFlightsInterval);
     setInterval(buildHourlyPositionsFromS3, config.backgroundJobs.buildHourlyPositionsInterval);
+    setInterval(() => remakeHourlyRollup(s3, BUCKET_NAME, WRITE_BUCKET_NAME, globalCache), config.backgroundJobs.remakeHourlyRollupInterval);
     
     // Initial builds
     setTimeout(() => buildFlightsFromS3(), config.initialJobDelays.buildFlightsDelay);
     setTimeout(() => buildHourlyPositionsFromS3(), config.initialJobDelays.buildHourlyPositionsDelay);
+    setTimeout(() => remakeHourlyRollup(s3, BUCKET_NAME, WRITE_BUCKET_NAME, globalCache), config.initialJobDelays.remakeHourlyRollupDelay);
 }
 
 initialize();
