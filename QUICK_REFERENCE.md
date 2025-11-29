@@ -92,6 +92,8 @@ python dashboard_utils.py --diagnose
 7. `/api/position-timeseries-live` - Live positions
 8. `/api/historical-stats` - Historical data
 
+Note: Several endpoints now include enriched type information (manufacturer, bodyType, aircraft_model): `/api/flights`, `/api/squawk-transitions`, `/api/position-timeseries-live` (timeseries buckets may include `manufacturers` counts) and `/api/cache-status` includes a `typeDatabase` summary.
+
 ## Current Status
 
 ✅ All 8 endpoints: **PASS**  

@@ -117,6 +117,7 @@
 **Display:**
 - Summary counts per source
 - Sortable table with airline code, name, flight count, unique aircraft, last seen
+ - Each airline entry now includes `topType` and `topManufacturer` fields to indicate the most common aircraft type and manufacturer observed for that airline in the selected time window.
 
 ---
 
@@ -208,6 +209,7 @@
 
 **Display:**
 - Shows flight, type, airline, from/to squawk, altitude, time gap
+ - Shows flight, type, manufacturer, airline, from/to squawk, altitude, time gap
 - Color-coded by category
 - Dark mode styled cells
 
@@ -227,6 +229,7 @@
 
 **Display Fields:**
 - Callsign, hex, registration, type
+ - Callsign, hex, registration, type, manufacturer, bodyType
 - Start/end coordinates and times
 - Max altitude, report count
 - Slant range at start/end

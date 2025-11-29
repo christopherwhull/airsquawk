@@ -15,6 +15,8 @@ const { computeAirlineStatsData, computeSquawkTransitionsData, computeHistorical
 const logger = require('./lib/logger');
 const { listS3Files, downloadAndParseS3File } = require('./lib/s3-helpers');
 const PositionCache = require('./lib/position-cache');
+const aircraftDB = require('./lib/aircraft-database');
+const aircraftTypesDB = require('./lib/aircraft-types-db');
 
 const app = express();
 const server = http.createServer(app);
@@ -798,6 +800,19 @@ async function buildFlightsFromS3() {
             const airlineCode = fl.callsign.startsWith('N') ? null : fl.callsign.substring(0, 3).toUpperCase();
             fl.airline_code = airlineCode;
             fl.airline_name = (airlineDb && airlineDb[airlineCode]) ? (airlineDb[airlineCode].name || airlineDb[airlineCode]) : '';
+            // Enrich each flight with manufacturer and body type using the types DB
+            try {
+                const typeInfo = aircraftTypesDB.lookup(fl.type);
+                if (typeInfo) {
+                    fl.manufacturer = typeInfo.manufacturer;
+                    fl.bodyType = typeInfo.bodyType;
+                    if (!fl.aircraft_model) {
+                        fl.aircraft_model = typeInfo.model;
+                    }
+                }
+            } catch (err) {
+                // continue if type DB not available
+            }
         }
         
         // Save hourly files for each hour represented in the flights
@@ -902,9 +917,24 @@ function summarizeFlightData(recs) {
     };
 
     const callsign = mostCommon(recs.map(r => r.ident).filter(Boolean));
-    const registration = mostCommon(recs.map(r => r.registration).filter(Boolean)) || registration_from_hexid(start.hex) || 'N/A';
+    
+    // Lookup aircraft in OpenSky database for registration and type
+    const aircraftData = aircraftDB.lookup(start.hex);
+    
+    const registration = mostCommon(recs.map(r => r.registration).filter(Boolean)) 
+        || aircraftData?.registration 
+        || registration_from_hexid(start.hex) 
+        || 'N/A';
+    
     const airline = mostCommon(recs.map(r => r.airline).filter(Boolean));
-    const type = mostCommon(recs.map(r => r.type).filter(Boolean));
+    
+    const type = mostCommon(recs.map(r => r.type).filter(Boolean)) 
+        || aircraftData?.typecode 
+        || 'N/A';
+    const typeInfo = aircraftTypesDB.lookup(type);
+    const manufacturer = typeInfo?.manufacturer || null;
+    const bodyType = typeInfo?.bodyType || null;
+    const fullModel = typeInfo?.model || aircraftData?.model || null;
 
     // Find a distinct end position if we have multiple records with different coordinates
     let endForCoords = end;
@@ -945,14 +975,17 @@ function summarizeFlightData(recs) {
         max_speed_kt: maxSpd,
         reports: recs.length,
         slant_range_start: slant_start,
-        slant_range_end: slant_end
+        slant_range_end: slant_end,
+        aircraft_model: fullModel || null,
+        manufacturer: manufacturer,
+        bodyType: bodyType
     };
 }
 
 async function writeFlightsCSV(flights, filePath) {
     const headers = ['ICAO', 'Callsign', 'Registration', 'Start_Time', 'End_Time', 'Duration_min', 
                      'Start_Lat', 'Start_Lon', 'End_Lat', 'End_Lon', 'Max_Alt_ft', 'Max_Speed_kt', 'Reports', 
-                     'Airline_Code', 'Airline_Name'];
+                     'Airline_Code', 'Airline_Name', 'Manufacturer', 'BodyType'];
     
     const rows = flights.map(fl => {
         const duration = ((fl.end_ts - fl.start_ts) / 60000).toFixed(2);
@@ -971,7 +1004,9 @@ async function writeFlightsCSV(flights, filePath) {
             fl.max_speed_kt || '',
             fl.reports,
             fl.airline_code || '',
-            fl.airline_name || ''
+            fl.airline_name || '',
+            fl.manufacturer || '',
+            fl.bodyType || ''
         ].join(',');
     });
     
@@ -998,6 +1033,9 @@ async function saveFlightsToS3(flights, key) {
             reports: fl.reports,
             airline_code: fl.airline_code,
             airline_name: fl.airline_name,
+            manufacturer: fl.manufacturer || null,
+            aircraft_model: fl.aircraft_model || null,
+            bodyType: fl.bodyType || null,
             slant_range_start: fl.slant_range_start !== undefined ? fl.slant_range_start : null,
             slant_range_end: fl.slant_range_end !== undefined ? fl.slant_range_end : null
         }));
@@ -1268,12 +1306,38 @@ const fetchData = async () => {
             let dbInfo = await getDbInfo(ac.hex);
             if (!dbInfo) dbInfo = {};
 
+            // Lookup aircraft in OpenSky database
+            const aircraftData = aircraftDB.lookup(ac.hex);
+            
+            // Use OpenSky data as primary source, fall back to old methods
+            const registration = aircraftData?.registration 
+                || ac.r 
+                || dbInfo.r 
+                || registration_from_hexid(ac.hex) 
+                || 'N/A';
+            
+            const aircraft_type = aircraftData?.typecode 
+                || ac.t 
+                || dbInfo.t 
+                || 'N/A';
+            
+            const aircraft_model = aircraftData?.model || null;
+            
+            // Lookup type information (manufacturer, body type)
+            const typeInfo = aircraftTypesDB.lookup(aircraft_type);
+            const manufacturer = typeInfo?.manufacturer || null;
+            const bodyType = typeInfo?.bodyType || null;
+            const fullModel = typeInfo?.model || aircraft_model;
+
             return {
                 ...ac,
                 flight,
                 airline: airlineDb[airlineCode] || 'N/A',
-                registration: ac.r || dbInfo.r || registration_from_hexid(ac.hex) || 'N/A',
-                aircraft_type: ac.t || dbInfo.t || 'N/A',
+                registration,
+                aircraft_type,
+                aircraft_model: fullModel,
+                manufacturer,
+                bodyType,
                 distance: (ac.lat && ac.lon && receiver_lat !== 0.0) ? calculate_distance(receiver_lat, receiver_lon, ac.lat, ac.lon).toFixed(1) : 'N/A',
             };
         }));

@@ -15,6 +15,7 @@ A real-time aircraft tracking and analytics dashboard that connects to a PiAware
 - **Position History** - 7-day rolling cache with 24-hour in-memory history
 - **Flight Statistics** - Track completed and active flights
 - **Airline Analytics** - Statistics by airline with drill-down capabilities
+- **Aircraft Types & Metadata** - Enriched aircraft data showing Manufacturer and Body Type across Live, Flights, Positions and Squawk views
 - **Reception Analysis** - Visualize reception range by bearing and altitude
 - **Squawk Transitions** - Monitor squawk code changes
 - **Heatmap Visualization** - Geographic density of aircraft positions
@@ -233,6 +234,11 @@ If you prefer a different location, set the corresponding environment variables 
 - Fixed type field persistence to S3
 
 ### v1.0.0 (2025-11-27)
+### v1.0.3 (2025-11-28)
+- **Type Database & Metadata**: Added aircraft types database with Typecode → Manufacturer/Model/BodyType mapping. Types DB (123 entries) built and uploaded to S3.
+- **UI Enhancements**: Live, Flights, Positions and Squawk tabs now show Manufacturer and Body Type; Flights saved to S3 include Manufacturer, Body Type, and Model.
+- **API Enhancements**: `/api/cache-status` reports `typeDatabase` summary; `/api/flights`, `/api/squawk-transitions`, and `/api/position-timeseries-live` contain `manufacturer`/`bodyType` data where applicable.
+
 - Initial release
 - Live tracking, position caching, S3 storage
 - Multiple visualizations and analytics tabs

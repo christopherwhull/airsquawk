@@ -75,6 +75,16 @@ All notable changes to the Aircraft Dashboard project will be documented in this
 - ~80% show N/A due to type database lookup misses (normal for unregistered/military aircraft)
 
 ## [1.0.0] - 2025-11-27
+## [1.0.3] - 2025-11-28
+
+### Added
+- **Aircraft Types Database**: Added `aircraft_types.json` (123 curated types) with Manufacturer, Model, BodyType and engines metadata.
+- **UI Enrichments**: Added Manufacturer and Body Type fields to Live, Flights, Positions, and Squawk dashboard views; Flights saved to S3 now include `manufacturer`, `bodyType`, and `aircraft_model` fields.
+- **API Enhancements**: `/api/cache-status` includes `typeDatabase` metadata; `/api/flights` and `/api/squawk-transitions` now include `manufacturer` and `bodyType`; `/api/position-timeseries-live` includes optional `manufacturers` counts per time bucket.
+
+### Changed
+- Updated `README.md`, `API.md`, `FUNCTIONS_DOCUMENTATION.md`, and `AIRCRAFT_DATABASE.md` to document the new types database and fields.
+
 
 ### Initial Release
 - Live aircraft tracking dashboard

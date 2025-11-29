@@ -1,6 +1,6 @@
 {
   "name": "aircraft-dashboard-piaware",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Aircraft Dashboard for PiAware - Real-time aircraft tracking and analytics dashboard. Requires PiAware server.",
   "main": "server.js",
   "scripts": {
