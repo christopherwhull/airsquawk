@@ -1,7 +1,7 @@
 {
   "name": "aircraft-dashboard-piaware",
   "version": "1.0.3",
-  "description": "Aircraft Dashboard for PiAware - Real-time aircraft tracking and analytics dashboard. Requires PiAware server.",
+  "description": "Aircraft Dashboard — Turn ADS-B data from a PiAware receiver into real-time flight intelligence and analytics for operations, monitoring, and research.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

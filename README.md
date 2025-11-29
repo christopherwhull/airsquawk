@@ -1,6 +1,12 @@
-# Aircraft Dashboard for PiAware
+# Aircraft Dashboard — Real-time Flight Intelligence for PiAware
 
-A real-time aircraft tracking and analytics dashboard that connects to a PiAware server to monitor ADS-B aircraft data.
+Turn raw ADS‑B feeds from a PiAware receiver into actionable, real-time flight intelligence. Aircraft Dashboard provides live tracking, fleet and airline analytics, historical playback, and reception analysis—on-premise or in the cloud—making it ideal for hobbyists, operators, small airports, and engineers who need reliable, low-latency situational awareness and flexible analytics.
+
+Why it matters:
+- Real-time situational awareness: See live aircraft positions and telemetry with minimal latency.
+- Deep analytics: Track flights, squawk transitions, and aggregate per-airline statistics.
+- Secure & private: Run fully on-premise with MinIO/S3 for optional archival and controlled data retention.
+- Extensible & open source: Integrate with PiAware and customize the data pipeline to meet your needs.
 
 ## Requirements
 

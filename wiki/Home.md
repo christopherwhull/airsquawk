@@ -1,27 +1,28 @@
 # Aircraft Dashboard Wiki
 
-Welcome to the Aircraft Dashboard wiki. This site documents installation, configuration, operation, deployment, and developer details for the Aircraft Dashboard for PiAware project.
+Turn PiAware ADS‑B data into real-time flight intelligence and analytics. Aircraft Dashboard is an open-source platform for live tracking, playback, and analytics — ideal for hobbyists, operators, and organizations that need on-premise situational awareness and secure data retention.
 
-Navigation
-- [Installation](Installation.md)
-- [Configuration](Configuration.md)
-- [MinIO Setup](MINIO.md)
-- [Deployment (systemd / Docker)](Deployment.md)
-- [API Reference](API.md)
-- [Troubleshooting](Troubleshooting.md)
-- [Contributing](Contributing.md)
-- [Changelog](Changelog.md)
+Who it's for:
+- Hobbyists and Enthusiasts: Visualize local aircraft and track flights in real time.
+- Operators & Airports: Monitor fleet movements and squawk transitions for operations.
+- Analysts & Researchers: Access granular position history and aggregated datasets for analysis.
 
-Purpose
-- Help operators install and run the dashboard on Windows, Linux, and macOS
-- Explain configuration and environment variables
-- Document MinIO S3 setup and required buckets
-- Provide deployment options: systemd, Docker, and development scripts
-- Provide a quick developer reference for extending the project
+Key benefits:
+- Rapid Deployment: Simple PiAware + Node.js setup with optional MinIO/S3 archival.
+- Privacy & Control: Run locally to keep data within your network.
+- Rich Analytics: Flight reconstruction, airline summaries, reception analysis, and squawk tracking.
+- Extensible: Customizable, open-source code base for building integrations and automation.
 
-How to use this wiki
-- Follow the Installation first, then Configuration
-- Use MinIO guide to get S3 storage (or Docker quick start)
-- See Deployment for production options
+## Quick Links
+- [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used.
+- [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary.
+- [API Summary](API.md) — New fields in endpoints (manufacturer, bodyType, aircraft_model) and examples.
+- [Official Release Notes](https://github.com/christopherwhull/aircraft-dashboard/blob/main/CHANGELOG.md) — Changelog & release summaries.
 
-If anything is missing or unclear, open an issue in the repository.
+## Recent Documentation Updates
+- November 2025: Added a curated types database with UI & API enrichment for Manufacturer/Model/Body Type.
+- November 2025: Cache Status includes `typeDatabase` summary and was added to the Cache tab.
+
+## Contributing
+Want to improve the wiki? Clone the wiki git repo and submit PRs or file issues on the main repository.
+
