@@ -23,3 +23,10 @@ s3stats.json
 test-file.json
 grid-data.json
 heatmap-grid.js
+__pycache__/
+# Generated tracker outputs
+*.kml
+*.jpg
+*.record
+piaware.reception.*
+aircraft-tracker-outputs/
