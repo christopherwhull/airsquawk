@@ -31,7 +31,12 @@ def validate_kml(path: str) -> int:
 
     errors = 0
     for i, pm in enumerate(placemarks, start=1):
-        coord = pm.find('.//kml:coordinates', ns) or pm.find('.//coordinates')
+        coord = None
+        # Robustly find coordinates element regardless of namespace
+        for e in pm.iter():
+            if e.tag.endswith('coordinates'):
+                coord = e
+                break
         if coord is None or not coord.text:
             print(f'Placemark {i}: missing <coordinates>')
             errors += 1
