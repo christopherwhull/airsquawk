@@ -4,9 +4,10 @@ A real-time aircraft tracking and analytics dashboard that connects to a PiAware
 
 ## Requirements
 
-- **PiAware Server** - Running and accessible on your local network
+- **PiAware Server** - Running and accessible on your local network (provides ADS-B data)
 - **Node.js** - Version 14 or higher
-- **MinIO S3 Storage** - For historical data storage and caching
+- **MinIO S3 Storage** - For historical data storage and caching (or compatible S3 service)
+- **Python 3.x** - Optional, for utility scripts and data analysis
 
 ## Features
 
@@ -21,6 +22,8 @@ A real-time aircraft tracking and analytics dashboard that connects to a PiAware
 
 ## Installation
 
+### Quick Start (All Platforms)
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/christopherwhull/aircraft-dashboard.git
@@ -32,14 +35,15 @@ cd aircraft-dashboard
 npm install
 ```
 
-3. Configure settings in `config.js`:
-   - Set your PiAware URL (default: `http://piaware.local:8080/data/aircraft.json`)
-   - Configure S3/MinIO connection details
+3. Configure settings in `config.js` or environment variables:
+   - Set your PiAware URL (default: `http://192.168.0.178:8080/data/aircraft.json`)
+   - Configure S3/MinIO connection details (default: `http://localhost:9000`)
    - Adjust server port (default: 3002)
+   - See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options
 
 4. Start the server:
 ```bash
-node server.js
+npm start
 ```
 
 5. Access the dashboard:
@@ -47,15 +51,45 @@ node server.js
 http://localhost:3002
 ```
 
+### Platform-Specific Setup
+
+**Windows:**
+- Use `restart-server.ps1` script for easy restart
+- Run: `npm run restart:windows`
+- See embedded restart instructions in the script
+
+**Linux/Mac:**
+- Follow [LINUX_SETUP.md](LINUX_SETUP.md) for comprehensive setup guide
+- Includes systemd service, Docker, and manual startup options
+- Run: `npm run restart:unix` or `bash restart-server.sh`
+- For production, use systemd service: `sudo systemctl start aircraft-dashboard`
+
 ## Configuration
+
+All configuration is centralized in `config.js`. Both Node.js server and Python utility scripts read from this single source.
+
+### Quick Configuration
 
 Edit `config.js` to customize:
 
 - **Data Source**: PiAware server URL
-- **S3 Storage**: MinIO endpoint and credentials
+- **S3 Storage**: MinIO/S3 endpoint and credentials
 - **Server Port**: Default 3002
+- **Buckets**: Read (historical) and write (current) bucket names
 - **Update Intervals**: Data fetch and cache refresh rates
 - **UI Settings**: Time ranges, graph settings, reception parameters
+
+### Environment Variables
+
+Override any setting using environment variables:
+```bash
+export S3_ACCESS_KEY=your_key
+export S3_SECRET_KEY=your_secret
+export PIAWARE_URL=http://your-piaware:8080/data/aircraft.json
+node server.js
+```
+
+See [CONFIGURATION.md](CONFIGURATION.md) for complete configuration documentation.
 
 ## PiAware Setup
 
@@ -112,12 +146,23 @@ The server runs several background processes:
 - **Cache Refresh**: Update position cache every 5 minutes
 - **Hourly Rollups**: Aggregate position data into hourly files
 
+## Python Utility Scripts
+
+Several Python scripts are included for data analysis and diagnostics:
+
+- `count_squawk_transitions_by_hour.py` - Analyze squawk transitions by hour
+- `count_squawk_1200.py` - Count VFR (1200) squawk codes
+- `count_squawk_7days.py` - 7-day squawk transition analysis
+- `count_squawk_7days_detailed.py` - Detailed squawk statistics
+
+All Python scripts use `config_reader.py` to read configuration from `config.js`.
+
 ## Data Storage
 
-### S3 Structure
+### S3 Bucket Structure
 
 ```
-aircraft-data-new/
+aircraft-data-new/ (write bucket - current data)
 ├── data/
 │   ├── piaware_aircraft_log_*.json    # Minute-by-minute position records
 │   └── hourly/
@@ -129,6 +174,10 @@ aircraft-data-new/
 │       └── flights_*.json            # Daily flight records
 └── aggregated/
     └── hourly_stats_*.json           # Hourly aggregated statistics
+
+aircraft-data/ (read bucket - historical data)
+└── data/
+    └── piaware_aircraft_log_*.json    # Historical position records
 ```
 
 ## Version History
@@ -152,6 +201,45 @@ MIT License
 ## Author
 
 Christopher Hull
+
+## Documentation
+
+- [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
+- [CONFIGURATION.md](CONFIGURATION.md) - Detailed configuration guide
+- [LINUX_SETUP.md](LINUX_SETUP.md) - Linux/Mac installation and systemd setup
+- [AIRCRAFT_TRACKER.md](AIRCRAFT_TRACKER.md) - Python tracker script documentation
+- [FUNCTIONS_DOCUMENTATION.md](FUNCTIONS_DOCUMENTATION.md) - API and function reference
+
+## Troubleshooting
+
+### Common Issues
+
+1. **"Cannot connect to PiAware"**
+   - Verify PiAware is running and accessible
+   - Check PIAWARE_URL in config.js matches your setup
+   - Test: `curl http://piaware.local:8080/data/aircraft.json`
+
+2. **"S3/MinIO connection failed"**
+   - Ensure MinIO is running: `docker ps` or check MinIO service
+   - Verify S3_ENDPOINT in config.js
+   - Check credentials are correct
+
+3. **"No data in dashboard"**
+   - Wait 1-2 minutes for initial data collection
+   - Check server logs for errors
+   - Verify PiAware is receiving aircraft
+
+4. **"Position cache empty"**
+   - Cache fills from S3 on startup (may take several minutes)
+   - Check S3 buckets contain data files
+   - Review cache status in Cache tab
+
+## Performance Notes
+
+- **Memory Usage**: ~200-500MB depending on aircraft density and cache size
+- **CPU Usage**: Minimal (~1-5%) during normal operation, spikes during background jobs
+- **Storage**: ~100MB per day of position data, ~50MB per day of flight data
+- **Network**: ~1-10 KB/s from PiAware (varies with traffic)
 
 ## Contributing
 

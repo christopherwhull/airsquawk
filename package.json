@@ -4,7 +4,10 @@
   "description": "Aircraft Dashboard for PiAware - Real-time aircraft tracking and analytics dashboard. Requires PiAware server.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "restart:windows": "powershell -ExecutionPolicy Bypass -File restart-server.ps1",
+    "restart:unix": "bash restart-server.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.937.0",
