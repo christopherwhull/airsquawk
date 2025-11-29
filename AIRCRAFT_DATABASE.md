@@ -234,6 +234,49 @@ node build_aircraft_types_db.js
 node upload-types.js
 ```
 
+### How to rebuild the types DB (step-by-step)
+
+1. Run the build script from the project root:
+
+```bash
+node build_aircraft_types_db.js
+```
+
+2. Example output from the script (your path may differ):
+
+```text
+✓ Created aircraft types database with 123 types
+✓ Saved to: /path/to/repo/aircraft_types.json
+
+Sample entries:
+{
+  "B731": { "manufacturer": "Boeing", "model": "Boeing 737-100", "bodyType": "Narrow Body", "engines": 2 }
+}
+```
+
+3. Upload the file to S3/MinIO using one of the following options (edit the endpoint/credentials as needed):
+
+- Node upload helper (edit credentials in `upload-types.js` if required):
+```bash
+node upload-types.js
+```
+
+- AWS CLI:
+```bash
+aws s3 cp aircraft_types.json s3://aircraft-data/aircraft_types.json --endpoint-url http://localhost:9000
+```
+
+- MinIO client:
+```bash
+mc alias set local http://localhost:9000 minioadmin minioadmin123
+mc cp aircraft_types.json local/aircraft-data/aircraft_types.json
+```
+
+4. Verify:
+- Check your server logs to see `Attempting to download and parse s3://.../aircraft_types.json` and successful parsing.
+- Call `/api/cache-status` in the server and confirm `typeDatabase.loaded: true` and `typeDatabase.typeCount` reflects the number in the file.
+
+
 ### Usage
 The types database is exposed in the server via `lib/aircraft-types-db.js`. Use it to enrich flight and aircraft records with manufacturer and body type information. Example:
 ```javascript
