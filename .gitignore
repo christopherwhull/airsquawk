@@ -8,6 +8,7 @@ node_modules/
 *.ps1
 !test-all.ps1
 *.py
+!config_reader.py
 scripts/
 public/
 lib/*.s
