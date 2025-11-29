@@ -102,6 +102,12 @@ tracker_start_time: float = 0.0  # When tracker started
 # Make args global so it's accessible in all functions
 args = None
 
+# Runtime directory for temporary files and minute log files
+RUNTIME_DIR = 'runtime'
+# Pattern for piaware minute files inside runtime
+PIAWARE_MINUTE_GLOB = os.path.join(RUNTIME_DIR, 'piaware_aircraft_log_*.json')
+PIAWARE_MINUTE_PREFIX = 'piaware_aircraft_log_'
+
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate positional distance between two coordinates in nautical miles using Haversine formula."""
     R = 3440.065  # Radius of Earth in nautical miles
@@ -553,11 +559,13 @@ def calculate_total_log_size() -> float:
     try:
         total_bytes = 0
         
-        # Find all piaware_aircraft_log files (both JSON and CSV) in current directory
-        for filename in os.listdir('.'):
+        # Find all piaware_aircraft_log files (both JSON and CSV) in runtime directory
+        if not os.path.exists(RUNTIME_DIR):
+            return 0.0
+        for filename in os.listdir(RUNTIME_DIR):
             # Match files that start with piaware_aircraft_log and end with .json or .csv
-            if filename.startswith('piaware_aircraft_log_') and (filename.endswith('.json') or filename.endswith('.csv')):
-                filepath = os.path.join('.', filename)
+            if filename.startswith(PIAWARE_MINUTE_PREFIX) and (filename.endswith('.json') or filename.endswith('.csv')):
+                filepath = os.path.join(RUNTIME_DIR, filename)
                 if os.path.isfile(filepath):
                     total_bytes += os.path.getsize(filepath)
         
@@ -606,11 +614,13 @@ def cleanup_old_files() -> None:
         cutoff_time = time.time() - (31 * 24 * 60 * 60)  # 31 days in seconds
         deleted_count = 0
         
-        # Find all piaware_aircraft_log files (both JSON and CSV) in current directory
-        for filename in os.listdir('.'):
+        # Find all piaware_aircraft_log files (both JSON and CSV) in runtime directory
+        if not os.path.exists(RUNTIME_DIR):
+            return
+        for filename in os.listdir(RUNTIME_DIR):
             # Match files that start with piaware_aircraft_log and end with .json or .csv
-            if filename.startswith('piaware_aircraft_log_') and (filename.endswith('.json') or filename.endswith('.csv')):
-                filepath = os.path.join('.', filename)
+            if filename.startswith(PIAWARE_MINUTE_PREFIX) and (filename.endswith('.json') or filename.endswith('.csv')):
+                filepath = os.path.join(RUNTIME_DIR, filename)
                 if os.path.isfile(filepath):
                     file_mtime = os.path.getmtime(filepath)
                     if file_mtime < cutoff_time:
@@ -1392,8 +1402,10 @@ def count_position_reports_24h() -> int:
         cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
         total_positions = 0
         
-        # Find all JSON log files
-        json_files = glob.glob('piaware_aircraft_log_*.json')
+        # Find all JSON log files in runtime dir
+        if not os.path.exists(RUNTIME_DIR):
+            return 0
+        json_files = glob.glob(PIAWARE_MINUTE_GLOB)
         
         for json_file in json_files:
             try:
@@ -2445,6 +2457,10 @@ Benefits:
     if not os.path.exists(OUTPUT_SUBDIR):
         os.makedirs(OUTPUT_SUBDIR)
         print(f"Created output directory: {OUTPUT_SUBDIR}")
+    # Create runtime directory for minute files and temp files
+    if not os.path.exists(RUNTIME_DIR):
+        os.makedirs(RUNTIME_DIR)
+        print(f"Created runtime directory: {RUNTIME_DIR}")
     
     # Initialize S3 client if enabled, before loading records
     if args.enable_s3:

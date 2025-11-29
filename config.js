@@ -7,8 +7,8 @@ module.exports = {
     // --- Server Configuration ---
     server: {
         port: process.env.PORT || 3002,
-        logFile: process.env.LOG_FILE || 'server.log',
-        accessLogFile: process.env.ACCESS_LOG_FILE || 'access.log',
+        logFile: process.env.LOG_FILE || 'runtime/server.log',
+        accessLogFile: process.env.ACCESS_LOG_FILE || 'runtime/access.log',
     },
 
     // --- Data Source Configuration ---
@@ -36,8 +36,8 @@ module.exports = {
 
     // --- State Management ---
     state: {
-        stateFile: process.env.STATE_FILE || 'dashboard-state.json',
-        lastDailyFlightBuildFile: '.last-daily-flight-build',
+        stateFile: process.env.STATE_FILE || 'runtime/dashboard-state.json',
+        lastDailyFlightBuildFile: process.env.LAST_DAILY_FILE || 'runtime/.last-daily-flight-build',
     },
 
     // --- Time Windows and Retention ---

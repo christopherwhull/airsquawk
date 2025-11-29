@@ -34,6 +34,25 @@ const s3 = new S3Client({
     forcePathStyle: config.s3.forcePathStyle,
 });
 
+// Ensure runtime directory exists for logs/state
+try {
+    const accessLogPath = path.join(__dirname, config.server.accessLogFile);
+    const stateFilePath = path.join(__dirname, config.state.stateFile);
+    const runtimeDir = path.dirname(accessLogPath);
+    if (!fs.existsSync(runtimeDir)) {
+        fs.mkdirSync(runtimeDir, { recursive: true });
+        logger.info(`Created runtime directory: ${runtimeDir}`);
+    }
+    // Also ensure state file parent dir exists (in case different)
+    const stateDir = path.dirname(stateFilePath);
+    if (!fs.existsSync(stateDir)) {
+        fs.mkdirSync(stateDir, { recursive: true });
+        logger.info(`Created state directory: ${stateDir}`);
+    }
+} catch (err) {
+    console.error('Failed to ensure runtime directory exists:', err);
+}
+
 // --- Global Cache for S3 Operations and Stats ---
 let globalCache = {
     airlineStats: {},
