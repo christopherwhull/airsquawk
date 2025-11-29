@@ -98,6 +98,25 @@ Ensure your PiAware server is:
 2. Providing ADS-B data via the JSON API
 3. Default URL: `http://piaware.local:8080/data/aircraft.json`
 
+## MinIO S3 Storage Setup
+
+MinIO is required for data persistence. Follow [MINIO_SETUP.md](MINIO_SETUP.md) for:
+- **Quick Start**: Docker installation (recommended)
+- **Platform-Specific**: Windows, Linux, macOS standalone installations
+- **Production**: Systemd service setup for Linux
+- **Configuration**: Bucket creation and integration with dashboard
+
+**Quick Docker Start:**
+```bash
+docker run -d -p 9000:9000 -p 9001:9001 \
+  -e MINIO_ROOT_USER=minioadmin \
+  -e MINIO_ROOT_PASSWORD=minioadmin123 \
+  -v minio_data:/data \
+  minio/minio:latest server /data --console-address ":9001"
+```
+
+Access console at: `http://localhost:9001`
+
 ## Usage
 
 ### Tabs
@@ -206,8 +225,10 @@ Christopher Hull
 
 - [CHANGELOG.md](CHANGELOG.md) - Version history and release notes
 - [CONFIGURATION.md](CONFIGURATION.md) - Detailed configuration guide
+- [MINIO_SETUP.md](MINIO_SETUP.md) - MinIO S3 storage installation for all platforms
 - [LINUX_SETUP.md](LINUX_SETUP.md) - Linux/Mac installation and systemd setup
 - [AIRCRAFT_TRACKER.md](AIRCRAFT_TRACKER.md) - Python tracker script documentation
+- [CROSSPLATFORM_SUMMARY.md](CROSSPLATFORM_SUMMARY.md) - Cross-platform implementation details
 - [FUNCTIONS_DOCUMENTATION.md](FUNCTIONS_DOCUMENTATION.md) - API and function reference
 
 ## Troubleshooting
