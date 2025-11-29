@@ -8,6 +8,30 @@ Why it matters:
 - Secure & private: Run fully on-premise with MinIO/S3 for optional archival and controlled data retention.
 - Extensible & open source: Integrate with PiAware and customize the data pipeline to meet your needs.
 
+---
+
+> Getting started (2 minutes)
+>
+> 1) Clone the repo and install dependencies
+>
+> ```bash
+> git clone https://github.com/christopherwhull/aircraft-dashboard.git
+> cd aircraft-dashboard
+> npm install
+> ```
+>
+> 2) Configure a PiAware endpoint in `config.js` or env var `PIAWARE_URL`
+>
+> 3) Start the server
+>
+> ```bash
+> npm start
+> ```
+>
+> You’ll have a working local dashboard at http://localhost:3002 — see the Cache and Live tabs for data.
+
+---
+
 ## Requirements
 
 - **PiAware Server** - Running and accessible on your local network (provides ADS-B data)

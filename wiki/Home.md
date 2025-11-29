@@ -13,6 +13,24 @@ Key benefits:
 - Rich Analytics: Flight reconstruction, airline summaries, reception analysis, and squawk tracking.
 - Extensible: Customizable, open-source code base for building integrations and automation.
 
+---
+
+> Getting started (2 minutes):
+>
+> ```bash
+> git clone https://github.com/christopherwhull/aircraft-dashboard.git
+> cd aircraft-dashboard
+> npm install
+> export PIAWARE_URL=http://your-piaware:8080/data/aircraft.json
+> npm start
+> 
+> # Open: http://localhost:3002
+> ```
+
+> See the docs for advanced setup: [LINUX_SETUP.md](../LINUX_SETUP.md), [MINIO_SETUP.md](../MINIO_SETUP.md), and [CONFIGURATION.md](../CONFIGURATION.md).
+
+---
+
 ## Quick Links
 - [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used.
 - [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary.
