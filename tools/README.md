@@ -40,6 +40,7 @@ This directory contains all the utility scripts and tools for the Aircraft Dashb
 
 ### Logo Management
 - `check_airline_stocks.js` - Check airlines with stock tickers
+- `create-logo-media-pack.js` - Download all logos and create ZIP media pack
 - `find_airlines_without_logos.js` - Find airlines missing logos
 - `process-airlines.js` - Process airline data (includes logo processing)
 

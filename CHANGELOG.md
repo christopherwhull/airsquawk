@@ -2,7 +2,13 @@
 
 All notable changes to the Aircraft Dashboard project will be documented in this file.
 
-## [1.0.4] - 2025-11-30
+## [1.0.5] - 2025-11-30
+
+### Added
+- **Logo Media Pack Generator**: New script (`tools/create-logo-media-pack.js`) to download all logos from S3 and create ZIP archives for backup/distribution
+- **Archiver Dependency**: Added `archiver` package for ZIP file creation
+- **Media Pack Documentation**: Comprehensive README for the logo media pack generator
+- **S3 Pagination Support**: Fixed logo listing to handle large S3 buckets with proper pagination (now finds all 3,149 logos)
 
 ### Fixed
 - **Airline Flights Header**: Added time window information to drilldown headers (e.g., "Flights for ABC - Airline Name (Last 24 Hours)")

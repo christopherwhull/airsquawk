@@ -60,6 +60,11 @@ const aircraftTypes = {
     'B789': { manufacturer: 'Boeing', model: 'Boeing 787-9 Dreamliner', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
     'B78X': { manufacturer: 'Boeing', model: 'Boeing 787-10 Dreamliner', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
 
+    // Airbus A300 Family (Wide Body)
+    'A306': { manufacturer: 'Airbus', model: 'Airbus A300-600', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'A30B': { manufacturer: 'Airbus', model: 'Airbus A300B2/B4', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'A3ST': { manufacturer: 'Airbus', model: 'Airbus A300-600ST Beluga', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+
     // Airbus A320 Family (Narrow Body)
     'A318': { manufacturer: 'Airbus', model: 'Airbus A318', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
     'A319': { manufacturer: 'Airbus', model: 'Airbus A319', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
@@ -88,6 +93,17 @@ const aircraftTypes = {
 
     // Airbus A380 (Wide Body)
     'A388': { manufacturer: 'Airbus', model: 'Airbus A380-800', bodyType: 'Wide Body', engines: 4, category: 'Commercial Jet' },
+
+    // Additional Airbus A320 Family Variants (from FAA/ICAO)
+    'A318': { manufacturer: 'Airbus', model: 'Airbus A318', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'A319': { manufacturer: 'Airbus', model: 'Airbus A319', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'A321': { manufacturer: 'Airbus', model: 'Airbus A321', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+
+    // Airbus A330 Family Variants (from FAA/ICAO)
+    'A332': { manufacturer: 'Airbus', model: 'Airbus A330-200', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'A333': { manufacturer: 'Airbus', model: 'Airbus A330-300', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'A338': { manufacturer: 'Airbus', model: 'Airbus A330-800', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'A339': { manufacturer: 'Airbus', model: 'Airbus A330-900', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
 
     // Embraer Regional Jets
     'E135': { manufacturer: 'Embraer', model: 'Embraer ERJ-135', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
@@ -120,6 +136,9 @@ const aircraftTypes = {
     'AT75': { manufacturer: 'ATR', model: 'ATR 72-600', bodyType: 'Regional Turboprop', engines: 2, category: 'Turboprop' },
     'AT76': { manufacturer: 'ATR', model: 'ATR 72-600', bodyType: 'Regional Turboprop', engines: 2, category: 'Turboprop' },
 
+    // Embraer Turboprops
+    'EMB120': { manufacturer: 'Embraer', model: 'Embraer EMB-120 Brasilia', bodyType: 'Regional Turboprop', engines: 2, category: 'Turboprop' },
+
     // Business Jets - Cessna
     'C25A': { manufacturer: 'Cessna', model: 'Citation CJ2', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
     'C25B': { manufacturer: 'Cessna', model: 'Citation CJ3', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
@@ -144,9 +163,48 @@ const aircraftTypes = {
     'GL5T': { manufacturer: 'Bombardier', model: 'Global 5000', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
     'GLEX': { manufacturer: 'Bombardier', model: 'Global Express', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
 
+    // Business Jets - Embraer
+    'E50P': { manufacturer: 'Embraer', model: 'Embraer Phenom 100', bodyType: 'Business Jet', engines: 1, category: 'Business Jet' },
+    'E55P': { manufacturer: 'Embraer', model: 'Embraer Phenom 300', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'E35L': { manufacturer: 'Embraer', model: 'Embraer Legacy 600/Lineage 1000', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'E545': { manufacturer: 'Embraer', model: 'Embraer Legacy 450', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'E550': { manufacturer: 'Embraer', model: 'Embraer Legacy 500', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'E70L': { manufacturer: 'Embraer', model: 'Embraer Praetor 600', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'E75L': { manufacturer: 'Embraer', model: 'Embraer Praetor 500', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+
     // Cargo Aircraft
     'B74F': { manufacturer: 'Boeing', model: 'Boeing 747-400F', bodyType: 'Wide Body Freighter', engines: 4, category: 'Cargo' },
     'B77F': { manufacturer: 'Boeing', model: 'Boeing 777F', bodyType: 'Wide Body Freighter', engines: 2, category: 'Cargo' },
+
+    // Classic Douglas Commercial Aircraft
+    'DC3': { manufacturer: 'Douglas', model: 'Douglas DC-3 Dakota', bodyType: 'Piston Airliner', engines: 2, category: 'Piston' },
+    'DC4': { manufacturer: 'Douglas', model: 'Douglas DC-4 Skymaster', bodyType: 'Piston Airliner', engines: 4, category: 'Piston' },
+    'DC6': { manufacturer: 'Douglas', model: 'Douglas DC-6 Liftmaster', bodyType: 'Piston Airliner', engines: 4, category: 'Piston' },
+    'DC7': { manufacturer: 'Douglas', model: 'Douglas DC-7 Seven Seas', bodyType: 'Piston Airliner', engines: 4, category: 'Piston' },
+    'DC8': { manufacturer: 'Douglas', model: 'Douglas DC-8 Jet Trader', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+    'DC85': { manufacturer: 'Douglas', model: 'Douglas DC-8-50', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+    'DC86': { manufacturer: 'Douglas', model: 'Douglas DC-8-60', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+    'DC87': { manufacturer: 'Douglas', model: 'Douglas DC-8-70', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+
+    // Douglas Military Variants
+    'C47': { manufacturer: 'Douglas', model: 'Douglas C-47 Skytrain', bodyType: 'Military Transport', engines: 2, category: 'Military' },
+    'C54': { manufacturer: 'Douglas', model: 'Douglas C-54 Skymaster', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'C118': { manufacturer: 'Douglas', model: 'Douglas C-118 Liftmaster', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'C124': { manufacturer: 'Douglas', model: 'Douglas C-124 Globemaster II', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'C133': { manufacturer: 'Douglas', model: 'Douglas C-133 Cargomaster', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+
+    // Douglas Military Bombers and Attack Aircraft
+    'B26': { manufacturer: 'Douglas', model: 'Douglas B-26 Marauder', bodyType: 'Military Bomber', engines: 2, category: 'Military' },
+    'A26': { manufacturer: 'Douglas', model: 'Douglas A-26 Invader', bodyType: 'Military Attack', engines: 2, category: 'Military' },
+    'A20': { manufacturer: 'Douglas', model: 'Douglas A-20 Havoc', bodyType: 'Military Attack', engines: 2, category: 'Military' },
+    'SBD': { manufacturer: 'Douglas', model: 'Douglas SBD Dauntless', bodyType: 'Military Dive Bomber', engines: 1, category: 'Military' },
+    'SB2D': { manufacturer: 'Douglas', model: 'Douglas SB2D Buccaneer', bodyType: 'Military Dive Bomber', engines: 1, category: 'Military' },
+
+    // Douglas Experimental and Special Purpose
+    'X3': { manufacturer: 'Douglas', model: 'Douglas X-3 Stiletto', bodyType: 'Experimental', engines: 1, category: 'Experimental' },
+    'D558': { manufacturer: 'Douglas', model: 'Douglas D-558-1 Skystreak', bodyType: 'Experimental', engines: 1, category: 'Experimental' },
+    'D5582': { manufacturer: 'Douglas', model: 'Douglas D-558-2 Skyrocket', bodyType: 'Experimental', engines: 1, category: 'Experimental' },
+
     'MD11': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-11', bodyType: 'Wide Body', engines: 3, category: 'Commercial Jet' },
     'MD11F': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-11F', bodyType: 'Wide Body Freighter', engines: 3, category: 'Cargo' },
 
@@ -163,8 +221,36 @@ const aircraftTypes = {
     'C172': { manufacturer: 'Cessna', model: 'Cessna 172 Skyhawk', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
     'C182': { manufacturer: 'Cessna', model: 'Cessna 182 Skylane', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
     'C208': { manufacturer: 'Cessna', model: 'Cessna 208 Caravan', bodyType: 'Utility Turboprop', engines: 1, category: 'Turboprop' },
+
+    // Piper Aircraft Types
+    'PA18': { manufacturer: 'Piper', model: 'Piper PA-18 Super Cub', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA20': { manufacturer: 'Piper', model: 'Piper PA-20 Pacer', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA22': { manufacturer: 'Piper', model: 'Piper PA-22 Tri-Pacer', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA23': { manufacturer: 'Piper', model: 'Piper PA-23 Apache', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA24': { manufacturer: 'Piper', model: 'Piper PA-24 Comanche', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA25': { manufacturer: 'Piper', model: 'Piper PA-25 Pawnee', bodyType: 'Agricultural', engines: 1, category: 'General Aviation' },
     'PA28': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P28A': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee 140', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P28B': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee 150/160', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P28R': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee Arrow', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P28S': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee Archer', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P28T': { manufacturer: 'Piper', model: 'Piper PA-28 Cherokee Turbo Arrow', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA30': { manufacturer: 'Piper', model: 'Piper PA-30 Twin Comanche', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA31': { manufacturer: 'Piper', model: 'Piper PA-31 Navajo', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA31T': { manufacturer: 'Piper', model: 'Piper PA-31 Navajo Chieftain', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA32': { manufacturer: 'Piper', model: 'Piper PA-32 Cherokee Six', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA32R': { manufacturer: 'Piper', model: 'Piper PA-32 Saratoga', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA34': { manufacturer: 'Piper', model: 'Piper PA-34 Seneca', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA36': { manufacturer: 'Piper', model: 'Piper PA-36 Pawnee Brave', bodyType: 'Agricultural', engines: 1, category: 'General Aviation' },
+    'PA38': { manufacturer: 'Piper', model: 'Piper PA-38 Tomahawk', bodyType: 'Trainer', engines: 1, category: 'General Aviation' },
+    'PA39': { manufacturer: 'Piper', model: 'Piper PA-39 Twin Comanche', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA42': { manufacturer: 'Piper', model: 'Piper PA-42 Cheyenne', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
+    'PA44': { manufacturer: 'Piper', model: 'Piper PA-44 Seminole', bodyType: 'Light Twin', engines: 2, category: 'General Aviation' },
     'PA46': { manufacturer: 'Piper', model: 'Piper PA-46 Malibu', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA46T': { manufacturer: 'Piper', model: 'Piper PA-46 Malibu Meridian', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'P46T': { manufacturer: 'Piper', model: 'Piper PA-46 Mirage', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
+    'PA48': { manufacturer: 'Piper', model: 'Piper PA-48 Enforcer', bodyType: 'Light Attack', engines: 1, category: 'General Aviation' },
+
     'SR22': { manufacturer: 'Cirrus', model: 'Cirrus SR22', bodyType: 'Light Aircraft', engines: 1, category: 'General Aviation' },
     'PC12': { manufacturer: 'Pilatus', model: 'Pilatus PC-12', bodyType: 'Utility Turboprop', engines: 1, category: 'Turboprop' },
 
@@ -173,6 +259,206 @@ const aircraftTypes = {
     'C17': { manufacturer: 'Boeing', model: 'Boeing C-17 Globemaster III', bodyType: 'Military Transport', engines: 4, category: 'Military' },
     'C5': { manufacturer: 'Lockheed', model: 'Lockheed C-5 Galaxy', bodyType: 'Military Transport', engines: 4, category: 'Military' },
     'A400': { manufacturer: 'Airbus', model: 'Airbus A400M Atlas', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+
+    // Military Fighters
+    'F15': { manufacturer: 'Boeing', model: 'Boeing F-15 Eagle', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'F16': { manufacturer: 'Lockheed Martin', model: 'F-16 Fighting Falcon', bodyType: 'Military Fighter', engines: 1, category: 'Military' },
+    'F22': { manufacturer: 'Lockheed Martin', model: 'Lockheed Martin F-22 Raptor', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'F35': { manufacturer: 'Lockheed Martin', model: 'Lockheed Martin F-35 Lightning II', bodyType: 'Military Fighter', engines: 1, category: 'Military' },
+    'F18': { manufacturer: 'Boeing', model: 'Boeing F/A-18 Hornet', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'F14': { manufacturer: 'Grumman', model: 'Grumman F-14 Tomcat', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'MIR2': { manufacturer: 'Mikoyan', model: 'Mikoyan MiG-21', bodyType: 'Military Fighter', engines: 1, category: 'Military' },
+    'SU27': { manufacturer: 'Sukhoi', model: 'Sukhoi Su-27 Flanker', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'SU30': { manufacturer: 'Sukhoi', model: 'Sukhoi Su-30 Flanker-H', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'SU35': { manufacturer: 'Sukhoi', model: 'Sukhoi Su-35 Flanker-E', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'SU57': { manufacturer: 'Sukhoi', model: 'Sukhoi Su-57 Felon', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'JAS39': { manufacturer: 'Saab', model: 'Saab JAS 39 Gripen', bodyType: 'Military Fighter', engines: 1, category: 'Military' },
+    'EF2000': { manufacturer: 'Eurofighter', model: 'Eurofighter Typhoon', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'RAFALE': { manufacturer: 'Dassault', model: 'Dassault Rafale', bodyType: 'Military Fighter', engines: 2, category: 'Military' },
+    'FA50': { manufacturer: 'Dassault', model: 'Dassault Falcon 50', bodyType: 'Business Jet', engines: 3, category: 'Business' },
+
+    // Military Bombers
+    'B1': { manufacturer: 'Rockwell', model: 'Rockwell B-1 Lancer', bodyType: 'Military Bomber', engines: 4, category: 'Military' },
+    'B2': { manufacturer: 'Northrop Grumman', model: 'Northrop Grumman B-2 Spirit', bodyType: 'Military Bomber', engines: 4, category: 'Military' },
+    'B52': { manufacturer: 'Boeing', model: 'Boeing B-52 Stratofortress', bodyType: 'Military Bomber', engines: 8, category: 'Military' },
+    'TU95': { manufacturer: 'Tupolev', model: 'Tupolev Tu-95 Bear', bodyType: 'Military Bomber', engines: 4, category: 'Military' },
+    'TU160': { manufacturer: 'Tupolev', model: 'Tupolev Tu-160 Blackjack', bodyType: 'Military Bomber', engines: 4, category: 'Military' },
+
+    // Military Transports (additional)
+    'C141': { manufacturer: 'Lockheed', model: 'Lockheed C-141 Starlifter', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'KC135': { manufacturer: 'Boeing', model: 'Boeing KC-135 Stratotanker', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'KC10': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas KC-10 Extender', bodyType: 'Military Transport', engines: 3, category: 'Military' },
+    'IL76': { manufacturer: 'Ilyushin', model: 'Ilyushin Il-76 Candid', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'AN12': { manufacturer: 'Antonov', model: 'Antonov An-12 Cub', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'AN124': { manufacturer: 'Antonov', model: 'Antonov An-124 Ruslan', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'AN225': { manufacturer: 'Antonov', model: 'Antonov An-225 Mriya', bodyType: 'Military Transport', engines: 6, category: 'Military' },
+
+    // Military Trainers
+    'T38': { manufacturer: 'Northrop', model: 'Northrop T-38 Talon', bodyType: 'Military Trainer', engines: 2, category: 'Military' },
+    'T45': { manufacturer: 'Boeing', model: 'Boeing T-45 Goshawk', bodyType: 'Military Trainer', engines: 1, category: 'Military' },
+    'L39': { manufacturer: 'Aero', model: 'Aero L-39 Albatros', bodyType: 'Military Trainer', engines: 1, category: 'Military' },
+    'Hawk': { manufacturer: 'BAE Systems', model: 'BAE Hawk', bodyType: 'Military Trainer', engines: 1, category: 'Military' },
+
+    // Military Helicopters
+    'UH1': { manufacturer: 'Bell', model: 'Bell UH-1 Iroquois', bodyType: 'Military Helicopter', engines: 1, category: 'Military' },
+    'UH60': { manufacturer: 'Sikorsky', model: 'Sikorsky UH-60 Black Hawk', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'AH64': { manufacturer: 'Boeing', model: 'Boeing AH-64 Apache', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'CH47': { manufacturer: 'Boeing', model: 'Boeing CH-47 Chinook', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'MI24': { manufacturer: 'Mil', model: 'Mil Mi-24 Hind', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'MI8': { manufacturer: 'Mil', model: 'Mil Mi-8 Hip', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'MI17': { manufacturer: 'Mil', model: 'Mil Mi-17 Hip-H', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'KA27': { manufacturer: 'Kamov', model: 'Kamov Ka-27 Helix', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+    'KA50': { manufacturer: 'Kamov', model: 'Kamov Ka-50 Hokum', bodyType: 'Military Helicopter', engines: 1, category: 'Military' },
+    'KA52': { manufacturer: 'Kamov', model: 'Kamov Ka-52 Alligator', bodyType: 'Military Helicopter', engines: 2, category: 'Military' },
+
+    // Military Surveillance/Reconnaissance
+    'U2': { manufacturer: 'Lockheed', model: 'Lockheed U-2 Dragon Lady', bodyType: 'Military Reconnaissance', engines: 1, category: 'Military' },
+    'SR71': { manufacturer: 'Lockheed', model: 'Lockheed SR-71 Blackbird', bodyType: 'Military Reconnaissance', engines: 2, category: 'Military' },
+    'E3': { manufacturer: 'Boeing', model: 'Boeing E-3 Sentry', bodyType: 'Military AWACS', engines: 4, category: 'Military' },
+    'E8': { manufacturer: 'Boeing', model: 'Boeing E-8 Joint STARS', bodyType: 'Military Surveillance', engines: 4, category: 'Military' },
+    'RC135': { manufacturer: 'Boeing', model: 'Boeing RC-135 Rivet Joint', bodyType: 'Military Reconnaissance', engines: 4, category: 'Military' },
+
+    // Military Special Purpose
+    'VC25': { manufacturer: 'Boeing', model: 'Boeing VC-25 (Air Force One)', bodyType: 'Military VIP Transport', engines: 4, category: 'Military' },
+    'C32': { manufacturer: 'Boeing', model: 'Boeing C-32 (Air Force Two)', bodyType: 'Military VIP Transport', engines: 2, category: 'Military' },
+    'C40': { manufacturer: 'Boeing', model: 'Boeing C-40 Clipper', bodyType: 'Military VIP Transport', engines: 2, category: 'Military' },
+
+    // Bombardier CRJ Family (from FAA/ICAO)
+    'CRJ1': { manufacturer: 'Bombardier', model: 'Bombardier CRJ-100', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'CRJ2': { manufacturer: 'Bombardier', model: 'Bombardier CRJ-200', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'CRJ7': { manufacturer: 'Bombardier', model: 'Bombardier CRJ-700', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'CRJ9': { manufacturer: 'Bombardier', model: 'Bombardier CRJ-900', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'CRJX': { manufacturer: 'Bombardier', model: 'Bombardier CRJ-1000', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+
+    // Airbus A220 (formerly Bombardier CSeries)
+    'BCS1': { manufacturer: 'Airbus', model: 'Airbus A220-100', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'BCS3': { manufacturer: 'Airbus', model: 'Airbus A220-300', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+
+    // Boeing 787 Family (from FAA/ICAO)
+    'B788': { manufacturer: 'Boeing', model: 'Boeing 787-8', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B789': { manufacturer: 'Boeing', model: 'Boeing 787-9', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B78X': { manufacturer: 'Boeing', model: 'Boeing 787-10', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+
+    // Boeing 777 Family Variants (from FAA/ICAO)
+    'B773': { manufacturer: 'Boeing', model: 'Boeing 777-300', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B77L': { manufacturer: 'Boeing', model: 'Boeing 777-200LR', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B77W': { manufacturer: 'Boeing', model: 'Boeing 777-300ER', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B778': { manufacturer: 'Boeing', model: 'Boeing 777-8', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+    'B779': { manufacturer: 'Boeing', model: 'Boeing 777-9', bodyType: 'Wide Body', engines: 2, category: 'Commercial Jet' },
+
+    // Additional Boeing 747 Variants (from FAA/ICAO)
+    'B74R': { manufacturer: 'Boeing', model: 'Boeing 747SR', bodyType: 'Wide Body', engines: 4, category: 'Commercial Jet' },
+    'B74S': { manufacturer: 'Boeing', model: 'Boeing 747SP', bodyType: 'Wide Body', engines: 4, category: 'Commercial Jet' },
+
+    // Boeing 707 and 720 (Historical but still tracked)
+    'B703': { manufacturer: 'Boeing', model: 'Boeing 707', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+    'B720': { manufacturer: 'Boeing', model: 'Boeing 720', bodyType: 'Narrow Body', engines: 4, category: 'Commercial Jet' },
+
+    // McDonnell Douglas MD-80 Series (from FAA/ICAO)
+    'MD81': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-81', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'MD82': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-82', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'MD83': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-83', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'MD87': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-87', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'MD88': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-88', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'MD90': { manufacturer: 'McDonnell Douglas', model: 'McDonnell Douglas MD-90', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+
+    // Fokker Aircraft (from FAA/ICAO)
+    'F27': { manufacturer: 'Fokker', model: 'Fokker F27 Friendship', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'F28': { manufacturer: 'Fokker', model: 'Fokker F28 Fellowship', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'F50': { manufacturer: 'Fokker', model: 'Fokker 50', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'F70': { manufacturer: 'Fokker', model: 'Fokker 70', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'F100': { manufacturer: 'Fokker', model: 'Fokker 100', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+
+    // British Aerospace Aircraft (from FAA/ICAO)
+    'BA11': { manufacturer: 'British Aerospace', model: 'British Aerospace One-Eleven', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'ATP': { manufacturer: 'British Aerospace', model: 'British Aerospace ATP', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'RJ70': { manufacturer: 'British Aerospace', model: 'British Aerospace RJ70', bodyType: 'Regional Jet', engines: 4, category: 'Regional Jet' },
+    'RJ85': { manufacturer: 'British Aerospace', model: 'British Aerospace RJ85', bodyType: 'Regional Jet', engines: 4, category: 'Regional Jet' },
+    'RJ1H': { manufacturer: 'British Aerospace', model: 'British Aerospace RJ100', bodyType: 'Regional Jet', engines: 4, category: 'Regional Jet' },
+
+    // Saab Aircraft (from FAA/ICAO)
+    'SF34': { manufacturer: 'Saab', model: 'Saab SF340', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'SB20': { manufacturer: 'Saab', model: 'Saab 2000', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+
+    // Additional Turboprop Aircraft (from FAA/ICAO)
+    'AT43': { manufacturer: 'ATR', model: 'ATR 42-300', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT45': { manufacturer: 'ATR', model: 'ATR 42-500', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT46': { manufacturer: 'ATR', model: 'ATR 42-600', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT72': { manufacturer: 'ATR', model: 'ATR 72-200', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT73': { manufacturer: 'ATR', model: 'ATR 72-210', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT75': { manufacturer: 'ATR', model: 'ATR 72-500', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AT76': { manufacturer: 'ATR', model: 'ATR 72-600', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+
+    // De Havilland Canada Aircraft (from FAA/ICAO)
+    'DHC6': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-6 Twin Otter', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'DHC7': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-7 Dash 7', bodyType: 'Turboprop', engines: 4, category: 'Turboprop' },
+    'DHC8': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-8 Dash 8', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'DH8A': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-8-100', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'DH8B': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-8-200', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'DH8C': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-8-300', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'DH8D': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-8-400', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+
+    // Additional Business Jets (from FAA/ICAO)
+    'CL30': { manufacturer: 'Bombardier', model: 'Bombardier Challenger 300', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'CL35': { manufacturer: 'Bombardier', model: 'Bombardier Challenger 350', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'CL60': { manufacturer: 'Bombardier', model: 'Bombardier Challenger 600', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GLEX': { manufacturer: 'Bombardier', model: 'Bombardier Global Express', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GL5T': { manufacturer: 'Bombardier', model: 'Bombardier Global 5000', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GLF4': { manufacturer: 'Gulfstream', model: 'Gulfstream IV', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GLF5': { manufacturer: 'Gulfstream', model: 'Gulfstream V', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GLF6': { manufacturer: 'Gulfstream', model: 'Gulfstream G650', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'GA7C': { manufacturer: 'Gulfstream', model: 'Gulfstream G700', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'H25B': { manufacturer: 'Hawker Beechcraft', model: 'Hawker 800', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'H25C': { manufacturer: 'Hawker Beechcraft', model: 'Hawker 1000', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+
+    // Additional General Aviation (from FAA/ICAO)
+    'BE20': { manufacturer: 'Beechcraft', model: 'Beechcraft King Air 200', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'BE40': { manufacturer: 'Hawker Beechcraft', model: 'Hawker 400', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'BE99': { manufacturer: 'Beechcraft', model: 'Beechcraft 99', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'B190': { manufacturer: 'Beechcraft', model: 'Beechcraft 1900', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'B350': { manufacturer: 'Beechcraft', model: 'Beechcraft King Air 350', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'C208': { manufacturer: 'Cessna', model: 'Cessna 208 Caravan', bodyType: 'Turboprop', engines: 1, category: 'Turboprop' },
+    'C25A': { manufacturer: 'Cessna', model: 'Cessna Citation CJ2', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'C25B': { manufacturer: 'Cessna', model: 'Cessna Citation CJ3', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'C25C': { manufacturer: 'Cessna', model: 'Cessna Citation CJ4', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'LJ35': { manufacturer: 'Learjet', model: 'Learjet 35', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+    'LJ60': { manufacturer: 'Learjet', model: 'Learjet 60', bodyType: 'Business Jet', engines: 2, category: 'Business Jet' },
+
+    // Additional Military Aircraft (from FAA/ICAO)
+    'K35R': { manufacturer: 'Boeing', model: 'Boeing KC-135 Stratotanker', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'C5M': { manufacturer: 'Lockheed Martin', model: 'Lockheed C-5M Super Galaxy', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'C30J': { manufacturer: 'Lockheed Martin', model: 'Lockheed Martin C-130J Hercules', bodyType: 'Military Transport', engines: 4, category: 'Military' },
+    'P8': { manufacturer: 'Boeing', model: 'Boeing P-8 Poseidon', bodyType: 'Military Patrol', engines: 2, category: 'Military' },
+
+    // Additional Russian/Soviet Aircraft (from FAA/ICAO)
+    'IL86': { manufacturer: 'Ilyushin', model: 'Ilyushin Il-86', bodyType: 'Wide Body', engines: 4, category: 'Commercial Jet' },
+    'IL96': { manufacturer: 'Ilyushin', model: 'Ilyushin Il-96', bodyType: 'Wide Body', engines: 4, category: 'Commercial Jet' },
+    'T134': { manufacturer: 'Tupolev', model: 'Tupolev Tu-134', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+    'T154': { manufacturer: 'Tupolev', model: 'Tupolev Tu-154', bodyType: 'Narrow Body', engines: 3, category: 'Commercial Jet' },
+    'T204': { manufacturer: 'Tupolev', model: 'Tupolev Tu-204', bodyType: 'Narrow Body', engines: 2, category: 'Commercial Jet' },
+
+    // Additional European Aircraft (from FAA/ICAO)
+    'A748': { manufacturer: 'Hawker Siddeley', model: 'Hawker Siddeley HS 748', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'J328': { manufacturer: 'Fairchild Dornier', model: 'Fairchild Dornier 328JET', bodyType: 'Regional Jet', engines: 2, category: 'Regional Jet' },
+    'D328': { manufacturer: 'Fairchild Dornier', model: 'Fairchild Dornier Do.328', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'JS31': { manufacturer: 'British Aerospace', model: 'British Aerospace Jetstream 31', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'JS32': { manufacturer: 'British Aerospace', model: 'British Aerospace Jetstream 32', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'JS41': { manufacturer: 'British Aerospace', model: 'British Aerospace Jetstream 41', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+
+    // Additional Asian Aircraft (from FAA/ICAO)
+    'YK40': { manufacturer: 'Yakovlev', model: 'Yakovlev Yak-40', bodyType: 'Regional Jet', engines: 3, category: 'Regional Jet' },
+    'YK42': { manufacturer: 'Yakovlev', model: 'Yakovlev Yak-42', bodyType: 'Regional Jet', engines: 3, category: 'Regional Jet' },
+    'AN24': { manufacturer: 'Antonov', model: 'Antonov An-24', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AN26': { manufacturer: 'Antonov', model: 'Antonov An-26', bodyType: 'Military Transport', engines: 2, category: 'Military' },
+    'AN28': { manufacturer: 'Antonov', model: 'Antonov An-28', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AN30': { manufacturer: 'Antonov', model: 'Antonov An-30', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'AN32': { manufacturer: 'Antonov', model: 'Antonov An-32', bodyType: 'Military Transport', engines: 2, category: 'Military' },
+    'AN72': { manufacturer: 'Antonov', model: 'Antonov An-72', bodyType: 'Military Transport', engines: 2, category: 'Military' },
+
+    // Additional Piston Aircraft (from FAA/ICAO)
+    'DHC5': { manufacturer: 'De Havilland Canada', model: 'De Havilland Canada DHC-5 Buffalo', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'L410': { manufacturer: 'LET', model: 'LET L-410 Turbolet', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
+    'D228': { manufacturer: 'Dornier', model: 'Dornier 228', bodyType: 'Turboprop', engines: 2, category: 'Turboprop' },
 
     // Helicopters
     'B407': { manufacturer: 'Bell', model: 'Bell 407', bodyType: 'Helicopter', engines: 1, category: 'Helicopter' },

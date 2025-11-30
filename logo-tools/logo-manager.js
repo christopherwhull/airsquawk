@@ -118,6 +118,11 @@ const STOCK_TICKERS = {
     'Textron Inc': 'TXT',
     'Spirit AeroSystems': 'SPR',
     'TransDigm Group': 'TDG',
+    'Piper': 'PIPR',
+    'Learjet': 'LEA',
+    'Hawker Beechcraft': 'TXT',
+    'Airbus': 'EAD.PA',
+    'Beechcraft': 'TXT',
 
     // Additional mappings can be added here
 };

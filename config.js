@@ -125,7 +125,8 @@ module.exports = {
     // --- Logging ---
     logging: {
         level: process.env.LOG_LEVEL || 'info',      // 'debug', 'info', 'warn', 'error'
-        format: 'combined',                            // Morgan format for access logs
+        format: process.env.LOG_FORMAT || 'w3c',     // 'combined', 'common', 'dev', 'short', 'tiny', 'w3c'
+        enableW3C: true, // Enable W3C extended logging
     },
 
     // --- Reception Tracking (KML Export) ---

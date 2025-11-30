@@ -279,7 +279,14 @@ function generateHeatmapData() {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 const accessLogStream = fs.createWriteStream(path.join(__dirname, config.server.accessLogFile), { flags: 'a' });
-app.use(morgan(config.logging.format, { stream: accessLogStream }));
+
+// Use W3C Extended Log Format if enabled, otherwise use Morgan format
+if (config.logging.enableW3C) {
+    const { logW3C } = require('./lib/logger');
+    app.use(logW3C);
+} else {
+    app.use(morgan(config.logging.format, { stream: accessLogStream }));
+}
 
 // --- API Routes (will be set up in initialize()) ---
 
