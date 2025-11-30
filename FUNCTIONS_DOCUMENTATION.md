@@ -512,6 +512,213 @@ Expected: All 13 tests pass
 
 ---
 
+## Logo Management Functions (logo-tools/logo-manager.js)
+
+### `isManufacturer(name)`
+**Purpose:** Determines if a company name represents an aircraft manufacturer rather than an airline.
+
+**Parameters:**
+- `name` (string): Company name to check
+
+**Returns:** boolean - true if manufacturer, false if airline
+
+**Logic:**
+- Checks against known manufacturer names (Boeing, Airbus, Embraer, etc.)
+- Used to route logos to appropriate S3 buckets (manufacturer-logos vs airline-logos)
+
+---
+
+### `loadDatabase()`
+**Purpose:** Loads the airline database from airline_database.json file.
+
+**Returns:** Promise<object> - Parsed JSON database object
+
+**Features:**
+- Asynchronous file reading with error handling
+- Validates JSON structure
+- Used by all database operations
+
+---
+
+### `saveDatabase(db)`
+**Purpose:** Saves the updated database back to airline_database.json.
+
+**Parameters:**
+- `db` (object): Database object to save
+
+**Features:**
+- Pretty-printed JSON output
+- Atomic write operation
+- Backup creation before overwrite
+
+---
+
+### `isShippingCompany(name)` / `isNotPassengerAirline(name)`
+**Purpose:** Classifies airlines by type for logo processing prioritization.
+
+**Parameters:**
+- `name` (string): Airline name to classify
+
+**Returns:** boolean
+
+**Categories:**
+- Shipping companies (FedEx, UPS, DHL)
+- Cargo airlines
+- Military/charter operators
+- Regional airlines
+
+---
+
+### `checkLogoExistsInS3(code)`
+**Purpose:** Checks if a logo already exists in the S3 bucket.
+
+**Parameters:**
+- `code` (string): Airline/manufacturer code
+
+**Returns:** Promise<boolean>
+
+**Implementation:**
+- Uses AWS SDK HeadObjectCommand
+- Checks both airline-logos and manufacturer-logos buckets
+- Prevents duplicate downloads
+
+---
+
+### `downloadLogoFromGitHub(code, source)`
+**Purpose:** Downloads logos from GitHub repositories.
+
+**Parameters:**
+- `code` (string): Airline code
+- `source` (object): GitHub repository source info
+
+**Returns:** Promise<Buffer|null>
+
+**Sources:**
+- Open-source aviation logo repositories
+- Community-maintained collections
+
+---
+
+### `downloadLogoFromStock(companyName)`
+**Purpose:** Downloads logos from stock photo APIs.
+
+**Parameters:**
+- `companyName` (string): Company name for search
+
+**Returns:** Promise<Buffer|null>
+
+**APIs:**
+- Multiple stock photo services
+- Fallback for Clearbit failures
+
+---
+
+### `downloadLogoFromClearbit(companyName)`
+**Purpose:** Downloads logos using Clearbit API with domain guessing.
+
+**Parameters:**
+- `companyName` (string): Company name
+
+**Returns:** Promise<Buffer|null>
+
+**Process:**
+- Generates multiple domain variations
+- Tests each domain with Clearbit API
+- Returns highest quality logo found
+
+---
+
+### `guessDomainsFromName(companyName)`
+**Purpose:** Generates multiple domain variations for logo lookup.
+
+**Parameters:**
+- `companyName` (string): Company name
+
+**Returns:** Array<string> - List of potential domains
+
+**Patterns:**
+- Direct: companyname.com
+- Aviation: flycompanyname.com, companynameair.com
+- Variations: companynameairlines.com, companyname-group.com
+- 10+ patterns total for comprehensive coverage
+
+---
+
+### `uploadLogoToS3(code, logoBuffer)`
+**Purpose:** Uploads logo to appropriate S3 bucket.
+
+**Parameters:**
+- `code` (string): Airline/manufacturer code
+- `logoBuffer` (Buffer): Logo image data
+
+**Features:**
+- Automatic bucket selection (airline-logos/manufacturer-logos)
+- Content-type detection
+- Public read access
+- Error handling and retries
+
+---
+
+### `updateDatabaseWithLogo(db, code)`
+**Purpose:** Updates database entry with logo URL.
+
+**Parameters:**
+- `db` (object): Database object
+- `code` (string): Airline code
+
+**Updates:**
+- logoUrl field with S3 URL
+- Timestamp tracking
+- Maintains data integrity
+
+---
+
+### `downloadLogosToFolder(db, folderPath, limit, type)`
+**Purpose:** Downloads logos for preview and approval workflow.
+
+**Parameters:**
+- `db` (object): Airline database
+- `folderPath` (string): Output folder path
+- `limit` (number|null): Maximum downloads (null for all)
+- `type` (string): Filter by airline type ('all', 'passenger', 'cargo')
+
+**Features:**
+- Parallel processing (5 concurrent downloads)
+- Progress reporting
+- Quality filtering
+- Local file storage for review
+
+---
+
+### `approveLogosFromFolder(db, folderPath)`
+**Purpose:** Approves and uploads logos from preview folder.
+
+**Parameters:**
+- `db` (object): Database object
+- `folderPath` (string): Folder containing approved logos
+
+**Process:**
+- Uploads all PNG files to S3
+- Updates database with logo URLs
+- Generates processing report
+- Cleanup of local files
+
+---
+
+### `generateReport(db)`
+**Purpose:** Generates comprehensive logo coverage report.
+
+**Parameters:**
+- `db` (object): Database object
+
+**Output:**
+- Total airlines count
+- Logos present/missing percentages
+- Breakdown by airline type
+- Processing statistics
+
+---
+
 ## Error Handling
 
 ### Frontend

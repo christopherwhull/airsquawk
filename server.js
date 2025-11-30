@@ -1329,15 +1329,29 @@ const fetchData = async () => {
             const bodyType = typeInfo?.bodyType || null;
             const fullModel = typeInfo?.model || aircraft_model;
 
+            // Lookup manufacturer logo
+            let manufacturerLogo = null;
+            if (manufacturer) {
+                // Find manufacturer code by name
+                const manufacturerEntry = Object.entries(airlineDb).find(([code, data]) => 
+                    data.name === manufacturer
+                );
+                if (manufacturerEntry) {
+                    const [manufacturerCode, manufacturerData] = manufacturerEntry;
+                    manufacturerLogo = manufacturerData.logo;
+                }
+            }
+
             return {
                 ...ac,
                 flight,
-                airline: airlineDb[airlineCode] || 'N/A',
+                airline: (airlineDb[airlineCode]?.name || airlineDb[airlineCode]) || 'N/A',
                 registration,
                 aircraft_type,
                 aircraft_model: fullModel,
                 manufacturer,
                 bodyType,
+                manufacturerLogo,
                 distance: (ac.lat && ac.lon && receiver_lat !== 0.0) ? calculate_distance(receiver_lat, receiver_lon, ac.lat, ac.lon).toFixed(1) : 'N/A',
             };
         }));

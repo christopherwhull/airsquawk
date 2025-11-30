@@ -2,6 +2,41 @@
 
 All notable changes to the Aircraft Dashboard project will be documented in this file.
 
+## [1.1.0] - 2025-11-30
+
+### Added
+- **Comprehensive Logo Management System**: Complete airline logo download, preview, and approval workflow
+- **Parallel Logo Processing**: Batch processing with 5 concurrent downloads for efficient bulk operations
+- **Multi-Source Logo Retrieval**: Support for GitHub repos, stock APIs, and Clearbit domain guessing
+- **Enhanced Domain Guessing**: Intelligent domain generation with 10+ variations per airline name
+- **Logo Preview and Approval**: Download to local folders for manual review before S3 upload
+- **Bulk Logo Operations**: Process entire backlog of 4352 airlines, successfully finding 2099 logos
+- **Manufacturer Logo Support**: Extended logo system to support aircraft manufacturers
+- **Logo Quality Validation**: Automatic filtering of low-quality or placeholder logos
+
+### Changed
+- **README.md**: Updated with logo management features and usage instructions
+- **FUNCTIONS_DOCUMENTATION.md**: Added comprehensive documentation for all logo management functions
+- **airline_database.json**: Updated with 1711 new logo URLs for previously missing airlines
+
+### Technical Details
+- Parallel processing: Promise.all with batches of 5 concurrent downloads
+- Domain guessing algorithm: Generates patterns like fly[name], [name]air, [name]airlines.com
+- Logo sources: Clearbit API primary, GitHub repos secondary, stock APIs tertiary
+- Quality filtering: Rejects logos smaller than 64x64 pixels or with low entropy
+- S3 integration: Automatic upload to airline-logos bucket with proper content-type
+- Database updates: Automatic logo URL field updates in airline_database.json
+
+### Performance
+- Bulk processing: 4352 airlines processed in parallel batches
+- Success rate: 48% logo discovery rate (2099 found, 1711 approved)
+- Processing time: Significantly reduced with parallel processing vs sequential
+
+### Documentation
+- `logo-tools/logo-manager.js`: Complete logo management script with all functions documented
+- Logo workflow: Download → Preview → Approve → Upload → Database Update
+- Command examples: `node logo-manager.js download 100`, `node logo-manager.js approve ./previews`
+
 ## [1.0.2] - 2025-11-28
 
 ### Added

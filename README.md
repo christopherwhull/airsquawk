@@ -46,6 +46,7 @@ Why it matters:
 - **Flight Statistics** - Track completed and active flights
 - **Airline Analytics** - Statistics by airline with drill-down capabilities
 - **Aircraft Types & Metadata** - Enriched aircraft data showing Manufacturer and Body Type across Live, Flights, Positions and Squawk views
+- **Logo Management System** - Comprehensive airline and manufacturer logo download, preview, and approval workflow with parallel processing
 - **Reception Analysis** - Visualize reception range by bearing and altitude
 - **Squawk Transitions** - Monitor squawk code changes
 - **Heatmap Visualization** - Geographic density of aircraft positions
@@ -208,6 +209,56 @@ Several Python scripts are included for data analysis and diagnostics:
 - `count_squawk_7days_detailed.py` - Detailed squawk statistics
 
 All Python scripts use `config_reader.py` to read configuration from `config.js`.
+
+## Logo Management
+
+The dashboard includes a comprehensive logo management system for airlines and aircraft manufacturers. Logos enhance the visual experience across all dashboard views.
+
+### Features
+
+- **Multi-Source Logo Retrieval**: Downloads from Clearbit API, GitHub repositories, and stock photo services
+- **Intelligent Domain Guessing**: Generates 10+ domain variations per company name (e.g., fly[name], [name]air, [name]airlines.com)
+- **Parallel Processing**: Batch downloads with 5 concurrent connections for efficient bulk operations
+- **Quality Filtering**: Automatic rejection of low-quality or placeholder logos
+- **Preview and Approval**: Download to local folders for manual review before S3 upload
+- **Manufacturer Support**: Separate handling for aircraft manufacturers vs airlines
+
+### Usage
+
+**Download logos for preview:**
+```bash
+# Download 100 missing logos
+node logo-tools/logo-manager.js download 100
+
+# Download all missing logos (parallel processing)
+node logo-tools/logo-manager.js download all
+```
+
+**Approve and upload logos:**
+```bash
+# Approve logos from preview folder
+node logo-tools/logo-manager.js approve ./airline-logo-previews
+```
+
+**Check coverage:**
+```bash
+# Generate logo coverage report
+node logo-tools/logo-manager.js report
+```
+
+### Logo Sources
+
+1. **Clearbit API** (Primary): Domain-based logo lookup with intelligent guessing
+2. **GitHub Repositories**: Open-source aviation logo collections
+3. **Stock APIs**: Commercial stock photo services as fallback
+
+### Storage
+
+Logos are stored in S3 buckets:
+- `airline-logos/` - Airline logos
+- `manufacturer-logos/` - Aircraft manufacturer logos
+
+All logos are publicly accessible and automatically linked in the airline database.
 
 ## Data Storage
 
