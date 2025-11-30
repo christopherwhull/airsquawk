@@ -39,6 +39,16 @@ Why it matters:
 - **MinIO S3 Storage** - For historical data storage and caching (or compatible S3 service)
 - **Python 3.x** - Optional, for utility scripts and data analysis
 
+## Project Structure
+
+- **`server.js`** - Main Node.js web server
+- **`config.js`** - Centralized configuration file
+- **`api-routes.js`** - API endpoint definitions
+- **`tools/`** - Utility scripts for data analysis, testing, and maintenance (see `tools/README.md`)
+- **`logo-tools/`** - Logo management and download utilities
+- **`public/`** - Static web assets (HTML, CSS, JavaScript)
+- **`runtime/`** - Generated files and logs (created at runtime)
+
 ## Features
 
 - **Live Aircraft Tracking** - Real-time display of aircraft positions from PiAware
@@ -203,12 +213,12 @@ The server runs several background processes:
 
 Several Python scripts are included for data analysis and diagnostics:
 
-- `count_squawk_transitions_by_hour.py` - Analyze squawk transitions by hour
-- `count_squawk_1200.py` - Count VFR (1200) squawk codes
-- `count_squawk_7days.py` - 7-day squawk transition analysis
-- `count_squawk_7days_detailed.py` - Detailed squawk statistics
+- `tools/count_squawk_transitions_by_hour.py` - Analyze squawk transitions by hour
+- `tools/count_squawk_1200.py` - Count VFR (1200) squawk codes
+- `tools/count_squawk_7days.py` - 7-day squawk transition analysis
+- `tools/count_squawk_7days_detailed.py` - Detailed squawk statistics
 
-All Python scripts use `config_reader.py` to read configuration from `config.js`.
+All Python scripts use `tools/config_reader.py` to read configuration from `config.js`.
 
 ## Logo Management
 
@@ -259,6 +269,51 @@ Logos are stored in S3 buckets:
 - `manufacturer-logos/` - Aircraft manufacturer logos
 
 All logos are publicly accessible and automatically linked in the airline database.
+
+## Logo Maintenance Scripts
+
+The repository includes a comprehensive set of maintenance scripts for managing airline and manufacturer logos:
+
+### Core Logo Management
+- **`logo-tools/logo-manager.js`** - Main logo management tool with parallel processing
+  - Downloads logos from multiple sources (Clearbit, GitHub, stock APIs)
+  - Bulk operations for logo approval and S3 upload
+  - Manufacturer logo support
+
+### Analysis Scripts
+- **`check_airline_stocks.js`** - Identifies airlines with stock tickers missing logos
+- **`find_airlines_without_logos.js`** - Analyzes current logo coverage across all airlines
+
+### Processing Scripts
+- **`process-airlines.js`** - Processes raw airline data into structured database format
+- **`build_aircraft_types_db.js`** - Builds aircraft type database from source files
+
+### Upload Utilities
+- **`upload-airline-db.js`** - Uploads airline database to S3
+- **`upload-to-s3.js`** - General S3 upload utility
+- **`upload-types.js`** - Uploads aircraft types database to S3
+
+### Server Management
+- **`tools/restart_server.bat`** - Windows batch script for server restart operations
+
+### Usage Examples
+
+```bash
+# Check for airlines missing logos
+node tools/check_airline_stocks.js
+
+# Find all airlines without logos
+node tools/find_airlines_without_logos.js
+
+# Process airline data
+node tools/process-airlines.js
+
+# Upload databases to S3
+node tools/upload-airline-db.js
+node tools/upload-types.js
+```
+
+All logo maintenance scripts are now included in the git repository for version control and collaboration.
 
 ## Data Storage
 
