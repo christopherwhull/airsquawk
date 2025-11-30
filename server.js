@@ -1342,6 +1342,13 @@ const fetchData = async () => {
                 }
             }
 
+            // Lookup airline logo
+            let airlineLogo = null;
+            if (airlineCode && airlineDb[airlineCode]) {
+                const airlineData = airlineDb[airlineCode];
+                airlineLogo = typeof airlineData === 'string' ? null : airlineData.logo;
+            }
+
             return {
                 ...ac,
                 flight,
@@ -1352,6 +1359,7 @@ const fetchData = async () => {
                 manufacturer,
                 bodyType,
                 manufacturerLogo,
+                airlineLogo,
                 distance: (ac.lat && ac.lon && receiver_lat !== 0.0) ? calculate_distance(receiver_lat, receiver_lon, ac.lat, ac.lon).toFixed(1) : 'N/A',
             };
         }));
