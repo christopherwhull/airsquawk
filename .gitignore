@@ -4,6 +4,8 @@ node_modules/
 !package.json
 !package-lock.json
 !config.js
+!aircraft_types.json
+!tools/aircraft_types.json
 *.log
 *.ps1
 !test-all.ps1
