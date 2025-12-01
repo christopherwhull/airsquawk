@@ -129,6 +129,12 @@ async function createZipArchive(logoFiles, tempDir, outputPath) {
             archive.file(localPath, { name: archivePath });
         });
 
+        // Add aircraft types database to the archive
+        const typesTempPath = path.join(tempDir, 'aircraft_types.json');
+        if (fs.existsSync(typesTempPath)) {
+            archive.file(typesTempPath, { name: 'aircraft_types.json' });
+        }
+
         archive.finalize();
     });
 }
@@ -137,16 +143,37 @@ async function createZipArchive(logoFiles, tempDir, outputPath) {
  * Generate metadata file for the media pack
  */
 function generateMetadata(logoFiles, outputPath) {
+    // Check if aircraft_types.json exists and get its stats
+    const typesPath = path.join(__dirname, '..', 'aircraft_types.json');
+    let typesInfo = null;
+    if (fs.existsSync(typesPath)) {
+        const stats = fs.statSync(typesPath);
+        typesInfo = {
+            filename: 'aircraft_types.json',
+            size: stats.size,
+            lastModified: stats.mtime
+        };
+    }
+
     const metadata = {
         generated: new Date().toISOString(),
-        totalFiles: logoFiles.length,
-        totalSize: logoFiles.reduce((sum, file) => sum + file.size, 0),
+        totalFiles: logoFiles.length + (typesInfo ? 1 : 0),
+        totalSize: logoFiles.reduce((sum, file) => sum + file.size, 0) + (typesInfo ? typesInfo.size : 0),
         files: logoFiles.map(file => ({
             filename: file.key,
             size: file.size,
             lastModified: file.lastModified
         }))
     };
+
+    // Add aircraft types info if available
+    if (typesInfo) {
+        metadata.files.push({
+            filename: typesInfo.filename,
+            size: typesInfo.size,
+            lastModified: typesInfo.lastModified
+        });
+    }
 
     fs.writeFileSync(outputPath, JSON.stringify(metadata, null, 2));
     console.log('📄 Metadata file generated');
@@ -194,6 +221,17 @@ async function main() {
         }
 
         console.log(`✅ Downloaded ${downloadedCount} logo files (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`);
+
+        // Copy aircraft types database
+        console.log('📋 Copying aircraft types database...');
+        const typesSourcePath = path.join(__dirname, '..', 'aircraft_types.json');
+        const typesTempPath = path.join(tempDir, 'aircraft_types.json');
+        if (fs.existsSync(typesSourcePath)) {
+            fs.copyFileSync(typesSourcePath, typesTempPath);
+            console.log('✅ Aircraft types database copied');
+        } else {
+            console.log('⚠️  Aircraft types database not found, skipping');
+        }
 
         // Create output directory
         const outputDir = path.join(__dirname, '..', 'media-packs');
