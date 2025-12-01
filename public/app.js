@@ -1057,15 +1057,15 @@ async function loadAirlineStats(hoursBack = null) {
                 row.appendChild(countCell);
                 row.appendChild(aircraftCell);
                 row.appendChild(lastSeenCell);
-                const topTypeCell = document.createElement('td'); topTypeCell.textContent = airline.topType || 'N/A'; row.appendChild(topTypeCell);
-                const topManuCell = document.createElement('td');
-                topManuCell.className = 'logo-cell';
+                const topManuCell = document.createElement('td'); topManuCell.textContent = airline.topManufacturer || 'N/A'; row.appendChild(topManuCell);
+                const topManuLogoCell = document.createElement('td');
+                topManuLogoCell.className = 'logo-cell';
                 if (airline.topManufacturerLogo) {
-                    topManuCell.innerHTML = `<img src="${airline.topManufacturerLogo}" alt="${airline.topManufacturer} logo" style="height: 30px; max-width: 60px; object-fit: contain; margin-right: 8px;" onerror="this.style.display='none';">${airline.topManufacturer || 'N/A'}`;
+                    topManuLogoCell.innerHTML = `<img src="${airline.topManufacturerLogo}" alt="${airline.topManufacturer} logo" style="height: 30px; max-width: 60px; object-fit: contain; margin-right: 8px;" onerror="this.style.display='none';">`;
                 } else {
-                    topManuCell.textContent = airline.topManufacturer || 'N/A';
+                    topManuLogoCell.textContent = '';
                 }
-                row.appendChild(topManuCell);
+                row.appendChild(topManuLogoCell);
                 
                 tableBody.appendChild(row);
             }
