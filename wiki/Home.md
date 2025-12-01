@@ -23,7 +23,7 @@ Key benefits:
 > npm install
 > export PIAWARE_URL=http://your-piaware:8080/data/aircraft.json
 > npm start
-> 
+>
 > # Open: http://localhost:3002
 > ```
 
@@ -35,12 +35,14 @@ Key benefits:
 - [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used.
 - [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary.
 - [API Summary](API.md) — New fields in endpoints (manufacturer, bodyType, aircraft_model) and examples.
+- [Logo Management](Logo_Management.md) — Logo media pack generator and logo system documentation.
 - [Official Release Notes](https://github.com/christopherwhull/aircraft-dashboard/blob/main/CHANGELOG.md) — Changelog & release summaries.
 
 ## Recent Documentation Updates
+- **December 2025 (v1.1.1)**: Fixed Cache Status Tab functionality with full HTML content, JavaScript handlers, and API integration for cache statistics and clearing.
+- **November 2025 (v1.0.5)**: Added Logo Media Pack Generator for downloading all logos into ZIP archives
 - November 2025: Added a curated types database with UI & API enrichment for Manufacturer/Model/Body Type.
 - November 2025: Cache Status includes `typeDatabase` summary and was added to the Cache tab.
 
 ## Contributing
 Want to improve the wiki? Clone the wiki git repo and submit PRs or file issues on the main repository.
-

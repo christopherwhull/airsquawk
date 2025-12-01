@@ -12,15 +12,43 @@
     <div id="connection-status" class="status-disconnected">● Disconnected</div>
 
     <div class="tabs">
-        <button class="tab-button active" onclick="showTab('live')">Live</button>
-        <button class="tab-button" onclick="showTab('airlines')">Airlines</button>
-        <button class="tab-button" onclick="showTab('flights')">Flights</button>
-        <button class="tab-button" onclick="showTab('positions')">Positions</button>
-        <button class="tab-button" onclick="showTab('squawk')">Squawk</button>
-        <button class="tab-button" onclick="showTab('heatmap')">Heatmap</button>
-        <button class="tab-button" onclick="showTab('reception')">Reception</button>
-        <button class="tab-button" onclick="showTab('cache')">Cache Status</button>
+        <button class="tab-button active" onclick="showTab('live', event)">Live</button>
+        <button class="tab-button" onclick="showTab('airlines', event)">Airlines</button>
+        <button class="tab-button" onclick="showTab('flights', event)">Flights</button>
+        <button class="tab-button" onclick="showTab('positions', event)">Positions</button>
+        <button class="tab-button" onclick="showTab('squawk', event)">Squawk</button>
+        <button class="tab-button" onclick="showTab('heatmap', event)">Heatmap</button>
+        <button class="tab-button" onclick="showTab('reception', event)">Reception</button>
+        <button class="tab-button" onclick="showTab('cache', event)">Cache Status</button>
     </div>
+    <!--
+    TAB INVENTORY:
+    1. live-tab: Live aircraft tracking with real-time position updates
+    2. airlines-tab: Airline statistics and flight data analysis
+    3. flights-tab: Flight tracking and historical flight data
+    4. positions-tab: Position statistics and time-series analysis
+    5. squawk-tab: Squawk code transition analysis
+    6. heatmap-tab: Aircraft position heatmap viewer (links to Leaflet)
+    7. reception-tab: Reception range analysis (bearing/altitude plots)
+    8. cache-tab: Heatmap cache status and management
+    -->
+    <script>
+    // Remove conflicting tab activation on DOMContentLoaded
+    // Only rely on showTab for tab switching
+    // window.addEventListener('DOMContentLoaded', function() {
+    //     document.querySelectorAll('.tab-content').forEach(function(content, idx) {
+    //         if (idx === 0) {
+    //             content.classList.add('active');
+    //         } else {
+    //             content.classList.remove('active');
+    //         }
+    //     });
+    // });
+    // Instead, activate the first tab on load using showTab
+    window.addEventListener('DOMContentLoaded', function() {
+        showTab('live');
+    });
+    </script>
 
     <div id="reception-tab" class="tab-content">
         <h2>Reception Range</h2>
@@ -291,45 +319,34 @@
 
     <div id="heatmap-tab" class="tab-content">
         <h2>Aircraft Position Heatmap</h2>
-        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
-            <div style="margin-bottom: 10px;">
-                <button onclick="loadHeatmap(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
-                <button onclick="loadHeatmap(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
-                <button onclick="loadHeatmap(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
-                <button onclick="loadHeatmap(168)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">7 Days</button>
-                <button onclick="loadHeatmap(744)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">31 Days</button>
-            </div>
-            <label for="heatmap-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
-            <input type="datetime-local" id="heatmap-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
-            <label for="heatmap-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
-            <input type="datetime-local" id="heatmap-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
-            <button onclick="loadHeatmap()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Generate Heatmap</button>
-            <span id="heatmap-total-positions" style="margin-left: 20px; font-weight: bold; font-size: 16px; color: #e0e0e0;"></span>
+
+        <div style="margin-bottom: 20px; padding: 15px; background: #2a2a2a; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #0066cc; margin-top: 0;">🗺️ Leaflet Heatmap Viewer</h3>
+            <a href="/heatmap-leaflet" target="_blank" style="display: inline-block; padding: 8px 16px; background: #0066cc; color: white; border-radius: 4px; text-decoration: none; font-weight: 500;">Open Leaflet Heatmap Viewer →</a>
         </div>
-        <div id="heatmap-timestamps" style="margin-top: 10px; font-size: 14px; color: #666;"></div>
-        <div id="heatmap-description" style="margin: 20px 0; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333; color: #e0e0e0;">
-            <div style="margin-bottom: 10px; font-size: 16px; font-weight: bold;">Grid Information</div>
-            <div id="heatmap-grid-info" style="margin-bottom: 15px; color: #bbb;">Loading...</div>
-            <div style="margin-bottom: 8px; font-size: 16px; font-weight: bold;">Color Scale</div>
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <span style="color: #bbb; font-size: 14px;">0</span>
-                <div id="heatmap-scale" style="flex: 1; height: 30px; background: linear-gradient(to right, hsl(240, 100%, 50%), hsl(180, 100%, 50%), hsl(120, 100%, 50%), hsl(60, 100%, 50%), hsl(0, 100%, 50%)); border-radius: 4px; border: 1px solid #555;"></div>
-                <span id="heatmap-scale-max" style="color: #bbb; font-size: 14px; min-width: 60px; text-align: right;">Max</span>
-            </div>
-            <div style="margin-top: 5px; font-size: 12px; color: #888; text-align: center;">Number of aircraft positions per grid cell</div>
-        </div>
-        <div id="heatmap-canvas-container" style="position: relative;">
-            <canvas id="heatmap-canvas" width="800" height="600"></canvas>
-        </div>
-        <h3>Raw Grid Data</h3>
-        <pre id="heatmap-raw-data" style="background-color: #eee; border: 1px solid #ccc; max-height: 200px; overflow-y: auto;"></pre>
     </div>
 
     <div id="cache-tab" class="tab-content">
         <h2>Cache Status</h2>
-        <button onclick="loadCacheStatus()" style="margin-bottom: 15px;">Refresh Cache Status</button>
-        <div id="cache-status-display" style="padding: 15px; background: #2a2a2a; border-radius: 4px; font-family: monospace; white-space: pre-wrap; color: #e0e0e0; border-left: 4px solid #0d7377;">
-            <p>Loading cache status...</p>
+        
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #4caf50; margin-top: 0;">📊 Heatmap Cache Statistics</h3>
+            <button onclick="loadCacheStatus()" style="padding: 8px 16px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 15px;">🔄 Refresh Cache Status</button>
+            <button onclick="clearHeatmapCache()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">🗑️ Clear Heatmap Cache</button>
+            
+            <div id="cache-status" style="color: #e0e0e0; font-family: monospace; background: #2a2a2a; padding: 15px; border-radius: 4px; margin-top: 10px;">
+                <div>Loading cache status...</div>
+            </div>
+        </div>
+        
+        <div style="padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #2196f3; margin-top: 0;">💾 Cache Information</h3>
+            <div style="color: #e0e0e0; line-height: 1.6;">
+                <p>The heatmap cache stores aircraft position data in memory for faster loading of heatmap visualizations.</p>
+                <p><strong>Cache Contents:</strong> Aircraft positions with timestamps, aircraft types, manufacturers, and flight information.</p>
+                <p><strong>Cache Source:</strong> S3 bucket data (piaware_aircraft_log files)</p>
+                <p><strong>Cache Refresh:</strong> Automatically reloaded when cleared or when server restarts</p>
+            </div>
         </div>
     </div>
 

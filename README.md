@@ -28,7 +28,7 @@ Why it matters:
 > npm start
 > ```
 >
-> You’ll have a working local dashboard at http://localhost:3002 — see the Cache and Live tabs for data.
+> You’ll have a working local dashboard at http://localhost:3002 — see all tabs including Cache Status, Live, Heatmap, and more for comprehensive flight data and analytics.
 
 ---
 

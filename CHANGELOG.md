@@ -2,12 +2,22 @@
 
 All notable changes to the Aircraft Dashboard project will be documented in this file.
 
-## [1.0.5] - 2025-11-30
+## [1.1.1] - 2025-12-01
+
+### Fixed
+- **Cache Status Tab**: Fixed non-functional Cache Status Tab by adding missing HTML content, JavaScript handlers, and API integration for displaying heatmap cache statistics and cache clearing functionality.
+- **Tab Documentation**: Added comprehensive tab inventory comment in index.html documenting all 8 dashboard tabs for future maintenance.
+
+### Changed
+- **Dashboard Tabs**: All tabs now fully functional with proper content loading and user interactions.
+
+## [1.1.0] - 2025-11-30
 
 ### Added
 - **Logo Media Pack Generator**: New script (`tools/create-logo-media-pack.js`) to download all logos from S3 and create ZIP archives for backup/distribution
+- **Media Pack S3 Uploader**: New script (`tools/upload-media-pack.js`) to extract and upload individual logo files from media packs to S3 (uses `media-pack-test` bucket by default)
 - **Archiver Dependency**: Added `archiver` package for ZIP file creation
-- **Media Pack Documentation**: Comprehensive README for the logo media pack generator
+- **Media Pack Documentation**: Comprehensive README for the logo media pack generator and uploader
 - **S3 Pagination Support**: Fixed logo listing to handle large S3 buckets with proper pagination (now finds all 3,149 logos)
 
 ### Fixed
