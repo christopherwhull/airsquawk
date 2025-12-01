@@ -1159,7 +1159,8 @@ async function loadAirlineFlights(airlineCode, airlineName, windowVal) {
             
             const hexCell = document.createElement('td');
             hexCell.style.color = '#bbb';
-            hexCell.textContent = flight.hex || 'N/A';
+            hexCell.textContent = airlineCode;
+            hexCell.setAttribute('data-sort-value', airlineCode);
             
             const regCell = document.createElement('td');
             regCell.style.color = '#bbb';
