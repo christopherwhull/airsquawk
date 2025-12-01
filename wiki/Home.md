@@ -32,14 +32,22 @@ Key benefits:
 ---
 
 ## Quick Links
-- [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used.
-- [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary.
-- [API Summary](API.md) — New fields in endpoints (manufacturer, bodyType, aircraft_model) and examples.
-- [Logo Management](Logo_Management.md) — Logo media pack generator and logo system documentation.
-- [Official Release Notes](https://github.com/christopherwhull/aircraft-dashboard/blob/main/CHANGELOG.md) — Changelog & release summaries.
+- [Live Tab](Live.md) — Real-time aircraft tracking and live statistics
+- [Airlines Tab](Airlines.md) — Airline activity statistics and flight drilldown
+- [Flights Tab](Flights.md) — Historical flight reconstruction and tracking
+- [Positions Tab](Positions.md) — Position statistics and time-series analysis
+- [Squawk Tab](Squawk.md) — Squawk code transition analysis
+- [Heatmap Tab](Heatmap.md) — Aircraft position density visualization
+- [Reception Tab](Reception.md) — ADS-B signal reception range analysis
+- [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary
+- [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used
+- [API Summary](API.md) — New fields in endpoints (manufacturer, bodyType, aircraft_model) and examples
+- [Logo Management](Logo_Management.md) — Logo media pack generator and logo system documentation
+- [Official Release Notes](https://github.com/christopherwhull/aircraft-dashboard/blob/main/CHANGELOG.md) — Changelog & release summaries
 
 ## Recent Documentation Updates
-- **December 2025 (v1.1.1)**: Fixed Cache Status Tab functionality with full HTML content, JavaScript handlers, and API integration for cache statistics and clearing.
+- **December 2025 (v1.1.1)**: Added dedicated wiki pages for all 8 dashboard tabs (Live, Airlines, Flights, Positions, Squawk, Heatmap, Reception, Cache Status)
+- **December 2025 (v1.1.1)**: Fixed Cache Status Tab functionality with full HTML content, JavaScript handlers, and API integration
 - **November 2025 (v1.0.5)**: Added Logo Media Pack Generator for downloading all logos into ZIP archives
 - November 2025: Added a curated types database with UI & API enrichment for Manufacturer/Model/Body Type.
 - November 2025: Cache Status includes `typeDatabase` summary and was added to the Cache tab.
