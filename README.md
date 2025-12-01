@@ -338,6 +338,63 @@ aircraft-data/ (read bucket - historical data)
     └── piaware_aircraft_log_*.json    # Historical position records
 ```
 
+### Media Packs
+
+**Media packs** are compressed ZIP archives containing all the visual and reference data needed for the Aircraft Dashboard system. They serve as complete, self-contained data packages for distribution and deployment.
+
+#### What's Included in a Media Pack
+
+- **Logo Collection**: All airline and manufacturer logos (PNG, SVG formats) organized in a `logos/` directory
+- **Aircraft Types Database**: `aircraft_types.json` containing manufacturer/model mappings for aircraft identification
+- **Metadata File**: JSON file with pack details, file counts, sizes, and generation timestamp
+
+#### Media Pack Structure
+
+```
+aircraft-dashboard-logos-YYYY-MM-DDTHH-MM-SS.zip
+├── logos/
+│   ├── AAL.png          # American Airlines logo
+│   ├── DAL.svg          # Delta Airlines logo
+│   ├── CESSNA.png       # Cessna manufacturer logo
+│   └── ...              # 3000+ logo files
+├── aircraft_types.json  # Aircraft type database
+└── metadata.json        # Pack information and statistics
+```
+
+#### Purpose and Benefits
+
+- **Complete Data Distribution**: Single file contains all logos and reference data
+- **Version Control**: Timestamped packs track data versions and updates
+- **Efficient Storage**: Compressed format reduces bandwidth and storage costs
+- **S3 Integration**: Individual files can be extracted and uploaded to S3 for direct serving
+- **Backup & Recovery**: Complete data snapshots for system restoration
+
+#### Media Pack Workflow
+
+1. **Generation**: `tools/create-logo-media-pack.js` downloads logos from S3 and creates ZIP archive
+2. **Distribution**: ZIP file committed to git repository for version control
+3. **Deployment**: `tools/upload-media-pack.js` extracts and uploads individual files to S3
+4. **Serving**: Logos served directly from S3 via CDN or direct URLs
+
+#### Tools
+
+- **`tools/create-logo-media-pack.js`**: Generate new media pack from S3 logo collection
+- **`tools/upload-media-pack.js`**: Extract and upload individual files to S3
+- **`tools/upload-media-pack.README.md`**: Detailed usage documentation
+
+#### Example Usage
+
+```bash
+# Generate new media pack
+node tools/create-logo-media-pack.js
+
+# Upload to S3 (dry run first)
+DRY_RUN=1 node tools/upload-media-pack.js
+node tools/upload-media-pack.js
+```
+
+Media packs ensure consistent, complete data distribution across deployments and provide an efficient way to manage the growing collection of airline and manufacturer visual assets.
+
 ## runtime/
 
 - `runtime/` is used for temporary files, minute log files and runtime state by the server and tracker.
