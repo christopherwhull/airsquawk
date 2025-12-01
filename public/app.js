@@ -1059,11 +1059,15 @@ async function loadAirlineStats(hoursBack = null) {
                 row.appendChild(aircraftCell);
                 row.appendChild(lastSeenCell);
                 const topManuCell = document.createElement('td');
-                // Display all manufacturers with their counts
+                // Display all manufacturers with their percentages
                 const manufacturers = airline.manufacturers || {};
+                const totalFlights = airline.count || 1; // Avoid division by zero
                 const manufacturerList = Object.entries(manufacturers)
                     .sort(([,a], [,b]) => b - a) // Sort by count descending
-                    .map(([name, count]) => `${name} (${count})`)
+                    .map(([name, count]) => {
+                        const percentage = Math.round((count / totalFlights) * 100);
+                        return `${name} (${percentage}%)`;
+                    })
                     .join(', ');
                 topManuCell.textContent = manufacturerList || 'N/A';
                 topManuCell.title = manufacturerList; // Tooltip for full list
