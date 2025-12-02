@@ -43,53 +43,102 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
 
     return R * c * 0.539957  # Convert to nautical miles
 
-def load_position_data(pattern: str, piaware_server: str) -> List[Dict]:
+def load_position_data(pattern: str, piaware_server: str, receiver_lat: float = 0.0, receiver_lon: float = 0.0) -> List[Dict]:
     """Load position data from JSON files matching the pattern."""
     positions = []
 
-    # Parse piaware server to get receiver coordinates
-    # This is a simplified approach - in reality you'd need to query the server
-    receiver_lat = 0.0  # Default, should be passed or looked up
-    receiver_lon = 0.0
+    print(f"Looking for files matching pattern: {pattern}")
+    print(f"Using receiver coordinates: {receiver_lat}, {receiver_lon}")
 
-    try:
-        # Try to get receiver position from the first file
-        files = glob.glob(pattern)
-        if files:
-            with open(files[0], 'r') as f:
-                sample_data = json.load(f)
-                if isinstance(sample_data, list) and sample_data:
-                    # Look for receiver position in the data
-                    for record in sample_data:
-                        if 'receiver_lat' in record and 'receiver_lon' in record:
-                            receiver_lat = record['receiver_lat']
-                            receiver_lon = record['receiver_lon']
-                            break
-    except Exception as e:
-        print(f"Warning: Could not determine receiver position: {e}")
+    files_found = glob.glob(pattern)
+    print(f"Found {len(files_found)} files matching pattern")
 
-    for filepath in glob.glob(pattern):
+    if not files_found:
+        print(f"No files found matching pattern: {pattern}")
+        return positions
+
+    for filepath in files_found:
         try:
-            with open(filepath, 'r') as f:
-                data = json.load(f)
+            print(f"Processing file: {filepath}")
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                
+            # Handle both single JSON array and NDJSON formats
+            if content.strip().startswith('['):
+                # Single JSON array format
+                data = json.loads(content)
+                if not isinstance(data, list):
+                    data = [data]
+            else:
+                # NDJSON format (one JSON object per line)
+                data = []
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line:
+                        try:
+                            data.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
 
-                if isinstance(data, list):
-                    for record in data:
-                        if isinstance(record, dict) and 'lat' in record and 'lon' in record:
+            print(f"File contains {len(data)} records")
+            if data and isinstance(data[0], dict):
+                sample_keys = list(data[0].keys())
+                print(f"Sample record keys: {sample_keys[:10]}")  # First 10 keys
+
+                # Check for position data - handle both formats
+                has_lat = any('lat' in key.lower() for key in sample_keys)
+                has_lon = any('lon' in key.lower() for key in sample_keys)
+                has_latitude = 'Latitude' in sample_keys
+                has_longitude = 'Longitude' in sample_keys
+                print(f"Has lat/lon keys: {has_lat}, {has_lon}")
+                print(f"Has Latitude/Longitude keys: {has_latitude}, {has_longitude}")
+
+                for record in data:
+                    if isinstance(record, dict):
+                        # Extract coordinates - try both naming conventions
+                        lat = None
+                        lon = None
+                        
+                        if 'lat' in record and record['lat'] not in (None, 'N/A', ''):
+                            lat = record['lat']
+                        elif 'Latitude' in record and record['Latitude'] not in (None, 'N/A', ''):
+                            lat = record['Latitude']
+                        
+                        if 'lon' in record and record['lon'] not in (None, 'N/A', ''):
+                            lon = record['lon']
+                        elif 'Longitude' in record and record['Longitude'] not in (None, 'N/A', ''):
+                            lon = record['Longitude']
+                        
+                        if lat is not None and lon is not None:
+                            # Create standardized record
+                            std_record = {
+                                'lat': float(lat) if isinstance(lat, str) and lat.replace('.', '').isdigit() else lat,
+                                'lon': float(lon) if isinstance(lon, str) and lon.replace('.', '').isdigit() else lon,
+                            }
+                            
+                            # Copy other useful fields
+                            for key in ['ICAO', 'Ident', 'Registration', 'Aircraft_type', 'Altitude_ft', 'Speed_kt']:
+                                if key in record:
+                                    std_record[key] = record[key]
+                            
                             # Calculate distance from receiver if we have coordinates
                             if receiver_lat != 0.0 and receiver_lon != 0.0:
-                                distance = calculate_distance(
-                                    receiver_lat, receiver_lon,
-                                    record['lat'], record['lon']
-                                )
-                                record['distance_nm'] = distance
+                                try:
+                                    distance = calculate_distance(
+                                        receiver_lat, receiver_lon,
+                                        std_record['lat'], std_record['lon']
+                                    )
+                                    std_record['distance_nm'] = distance
+                                except (ValueError, TypeError):
+                                    pass
 
-                            positions.append(record)
+                            positions.append(std_record)
 
         except Exception as e:
-            print(f"Warning: Could not load {filepath}: {e}")
+            print(f"Error processing {filepath}: {e}")
             continue
 
+    print(f"Total positions loaded: {len(positions)}")
     return positions
 
 def create_heatmap(positions: List[Dict], cell_size_nm: int, output_file: str) -> None:
@@ -199,17 +248,24 @@ def main():
                        help='Cell size in nautical miles (default: 5)')
     parser.add_argument('--pattern', required=True,
                        help='File pattern for JSON position data files')
+    parser.add_argument('--receiver-lat', type=float, default=0.0,
+                       help='Receiver latitude for distance calculations')
+    parser.add_argument('--receiver-lon', type=float, default=0.0,
+                       help='Receiver longitude for distance calculations')
 
     args = parser.parse_args()
 
     print(f"Generating heatmap with {args.cell_size} NM cells...")
-    print(f"Loading data from: {args.pattern}")
+    print(f"PiAware server: {args.piaware_server}")
+    print(f"Output file: {args.output}")
+    print(f"File pattern: {args.pattern}")
+    print(f"Receiver coordinates: {args.receiver_lat}, {args.receiver_lon}")
 
     # Load position data
-    positions = load_position_data(args.pattern, args.piaware_server)
+    positions = load_position_data(args.pattern, args.piaware_server, args.receiver_lat, args.receiver_lon)
 
     if not positions:
-        print("No position data found")
+        print("No position data found - exiting")
         sys.exit(1)
 
     print(f"Loaded {len(positions)} positions")

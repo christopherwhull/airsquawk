@@ -70,8 +70,6 @@ piaware_url: str = ""
 output_filename: str = "aircraft_log.csv"
 output_format: str = "csv"
 current_hour: int = -1
-current_file: str = ""
-previous_file: str = ""
 total_log_size: float = 0.0  # in MB
 pending_aircraft: List[dict] = []  # Buffer for aircraft data
 last_write_time: float = 0.0
@@ -97,12 +95,13 @@ position_reports_24h: int = 0  # Position reports from past 24 hours
 running_position_count: int = 0  # Running total of position reports
 s3_client = None  # S3 client for uploads
 last_s3_upload_time: float = 0.0  # Last S3 upload timestamp
+last_minute_upload_time: float = 0.0  # Last minute file upload timestamp
 s3_upload_enabled: bool = False  # Whether S3 uploads are enabled
 last_flightaware_upload_time: float = 0.0  # Last FlightAware URL upload timestamp
 flightaware_urls_buffer: List[str] = []  # Buffer for FlightAware URLs to upload
 aircraft_type_cache_age_days: int = 30  # Days before refreshing type database cache
-last_minute_upload_time: float = 0.0  # Last per-minute file upload timestamp
-last_hourly_rollup_hour: int = -1  # Last hour when rollup was performed
+s3_upload_count: int = 0  # Number of S3 uploads
+last_uploaded_file: str = ""  # Last uploaded S3 file key
 
 # Real-time position tracking (for current run only)
 positions_last_minute: List[float] = []  # Timestamps of positions in last minute
@@ -402,9 +401,11 @@ def update_aircraft_tracking(current_aircraft: List[dict]) -> None:
                     except Exception:
                         distance = 'N/A'
             
+            now_dt = datetime.now(timezone.utc)
+            now_ts = time.time()
             aircraft_tracking[hex_code] = {
-                'first_seen': now,
-                'last_seen': now,
+                'first_seen': now_dt,
+                'last_seen': now_dt,
                 'hex': hex_code,
                 'flight': flight,
                 'registration': registration if registration != 'N/A' else None,
@@ -421,7 +422,7 @@ def update_aircraft_tracking(current_aircraft: List[dict]) -> None:
                 'lon': (aircraft.get('lon') if aircraft.get('lon') not in (None, 'N/A') else None),
                 'r_dst': (distance if distance not in (None, 'N/A') else None),
                 'dbFlags': aircraft.get('dbFlags', 0),
-                'position_timestamp': 0,
+                'position_timestamp': now_ts,
                 'data_quality': None
             }
             flight_str = f"({flight})" if flight != 'N/A' else ""
@@ -1550,6 +1551,7 @@ def initialize_s3_client(endpoint_url: str, access_key: str, secret_key: str) ->
         s3_upload_enabled = False
         return False
     
+    print(f"Initializing S3 client with endpoint: {endpoint_url}, access_key: {access_key[:4]}****")
     try:
         s3_client = boto3.client(
             's3',
@@ -1804,51 +1806,6 @@ def load_current_hour_from_s3(bucket_name: str) -> None:
                     continue
             
             print(f"Loaded {len(s3_records)} unique records from S3")
-            
-            # Load local current hour file if it exists
-            local_records = {}  # key: (icao, last_seen), value: aircraft_data
-            local_file = current_file if current_file else None
-            
-            if local_file and os.path.exists(local_file):
-                print(f"Loading local file: {local_file}")
-                try:
-                    with open(local_file, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            if line.strip():
-                                try:
-                                    aircraft_data = json.loads(line)
-                                    icao = aircraft_data.get('ICAO')
-                                    last_seen = aircraft_data.get('Last_Seen')
-                                    
-                                    if icao and last_seen:
-                                        key = (icao, last_seen)
-                                        local_records[key] = aircraft_data
-                                except json.JSONDecodeError:
-                                    continue
-                    
-                    print(f"Loaded {len(local_records)} records from local file")
-                except Exception as e:
-                    print(f"\033[91mError reading local file: {e}\033[0m")
-            
-            # Find records in S3 that are missing from local file
-            missing_keys = set(s3_records.keys()) - set(local_records.keys())
-            
-            if missing_keys:
-                print(f"\033[93mFound {len(missing_keys)} records in S3 not in local file\033[0m")
-                
-                # Append missing records to local file
-                if local_file:
-                    try:
-                        with open(local_file, 'a', encoding='utf-8') as f:
-                            for key in sorted(missing_keys):
-                                aircraft_data = s3_records[key]
-                                f.write(json.dumps(aircraft_data) + '\n')
-                        
-                        print(f"\033[92mAppended {len(missing_keys)} missing records to local file\033[0m")
-                    except Exception as e:
-                        print(f"\033[91mError appending to local file: {e}\033[0m")
-            else:
-                print("Local file is in sync with S3")
                 
         except ClientError as e:
             if e.response['Error']['Code'] == 'NoSuchBucket':
@@ -1862,7 +1819,7 @@ def load_current_hour_from_s3(bucket_name: str) -> None:
 
 def upload_minute_file_to_s3(bucket_name: str, aircraft_buffer: List[dict]) -> None:
     """Upload a buffer of aircraft data as a per-minute file to S3."""
-    global last_minute_upload_time
+    global last_minute_upload_time, s3_upload_count, last_uploaded_file
     
     if not s3_upload_enabled or s3_client is None:
         return
@@ -1871,9 +1828,12 @@ def upload_minute_file_to_s3(bucket_name: str, aircraft_buffer: List[dict]) -> N
         return  # Nothing to upload
     
     try:
-        # Generate minute filename
+        # Generate minute filename with optional prefix
         now = datetime.now(timezone.utc)
-        minute_filename = f"piaware_aircraft_log_{now.strftime('%Y%m%d_%H%M')}.json"
+        from config_reader import get_config
+        config = get_config()
+        s3_prefix = config.get('s3_prefix', '')
+        minute_filename = f"{s3_prefix}piaware_aircraft_log_{now.strftime('%Y%m%d_%H%M')}.json"
         
         # Create JSON content from the provided buffer
         json_lines = []
@@ -1887,6 +1847,13 @@ def upload_minute_file_to_s3(bucket_name: str, aircraft_buffer: List[dict]) -> N
             # Standardize timestamps to ISO 8601 Z
             first_seen_iso = aircraft_info['first_seen'].astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
             last_seen_iso = aircraft_info['last_seen'].astimezone(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            # Per-position timestamp: use 'position_timestamp' if present, else fallback to last_seen
+            position_ts = aircraft_info.get('position_timestamp', None)
+            if position_ts:
+                position_dt = datetime.fromtimestamp(position_ts, tz=timezone.utc)
+                position_iso = position_dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+            else:
+                position_iso = last_seen_iso
             
             aircraft_data = {
                 'ICAO': aircraft_info['hex'],
@@ -1908,7 +1875,9 @@ def upload_minute_file_to_s3(bucket_name: str, aircraft_buffer: List[dict]) -> N
                 'Longitude': lon,
                 'Nationality': nationality,
                 'First_Seen': first_seen_iso,
-                'Last_Seen': last_seen_iso
+                'Last_Seen': last_seen_iso,
+                'Position_Timestamp': position_iso,
+                'Data_Quality': aircraft_info.get('data_quality', 'N/A')
             }
             json_lines.append(json.dumps(aircraft_data))
         
@@ -1923,7 +1892,9 @@ def upload_minute_file_to_s3(bucket_name: str, aircraft_buffer: List[dict]) -> N
         )
         
         last_minute_upload_time = time.time()
-        print(f"\033[96mUploaded minute file to S3: {minute_filename} ({len(aircraft_buffer)} records)\033[0m")
+        s3_upload_count += 1
+        last_uploaded_file = minute_filename
+        print(f"\033[96mUploaded minute file to S3: s3://{bucket_name}/{minute_filename} ({len(aircraft_buffer)} records, total uploads: {s3_upload_count})\033[0m")
         
     except Exception as e:
         print(f"\033[91mError uploading minute file to S3: {e}\033[0m")
@@ -2137,7 +2108,9 @@ def generate_heatmap() -> None:
                     '--piaware-server', piaware_url.replace('http://', '').replace('/data/aircraft.json', ''),
                     '--output', output_file,
                     '--cell-size', str(cell_size),
-                    '--pattern', os.path.join(temp_dir, '*.json')
+                    '--pattern', os.path.join(temp_dir, '*.json'),
+                    '--receiver-lat', str(receiver_lat),
+                    '--receiver-lon', str(receiver_lon)
                 ]
                 
                 result = subprocess.run(cmd, capture_output=True, text=True)
@@ -2249,8 +2222,16 @@ def populate_reception_records_from_s3(history_hours: int):
                         # Check if record is within the time window and has a valid position
                         last_seen_str = record.get('Last_Seen')
                         if last_seen_str:
-                            last_seen_dt = datetime.strptime(last_seen_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
-                            if last_seen_dt < cutoff_time:
+                            try:
+                                # Try different datetime formats
+                                if last_seen_str.endswith('Z'):
+                                    last_seen_dt = datetime.strptime(last_seen_str, '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc)
+                                else:
+                                    last_seen_dt = datetime.strptime(last_seen_str, '%Y-%m-%dT%H:%M:%S').replace(tzinfo=timezone.utc)
+                                if last_seen_dt < cutoff_time:
+                                    continue
+                            except ValueError:
+                                # Skip records with invalid datetime format
                                 continue
 
                         if is_valid_position(record.get('Latitude'), record.get('Longitude')):
@@ -2335,11 +2316,12 @@ def set_icao_cache_to_s3(hex_code: str, registration: str, aircraft_type: str):
 
 def main():
     """Main monitoring loop."""
-    global piaware_url, output_filename, output_format, current_file, current_hour, total_log_size
+    global piaware_url, output_filename, output_format, current_hour, total_log_size
     global receiver_lat, receiver_lon, receiver_version, history_cache, last_kml_write_time, last_jpg_write_time, last_heatmap_write_time
     global position_reports_24h, running_position_count, heatmap_cell_size, last_s3_upload_time, last_flightaware_upload_time, last_minute_upload_time
     global tracker_start_time
     global s3_bucket_name, s3_kml_bucket_name, s3_flightaware_bucket_name, s3_reception_bucket_name, s3_icao_cache_bucket_name
+    global s3_upload_count, last_uploaded_file
     s3_upload_enabled = False # Initialize to False to prevent UnboundLocalError
 
     # Create an on-disk dated backup of this script before runtime execution
@@ -2415,15 +2397,19 @@ Benefits:
             default_endpoint = config.get('s3Endpoint', 'http://localhost:9000')
             default_access = config.get('s3AccessKeyId', 'minioadmin')
             default_secret = config.get('s3SecretAccessKey', 'minioadmin123')
+            # Use readBucket from config.js for default S3 bucket
+            default_bucket = config.get('readBucket', 'aircraft-data')
         except Exception as e:
             print(f"Warning: Could not read config.js: {e}")
             default_endpoint = 'http://localhost:9000'
             default_access = 'minioadmin'
             default_secret = 'minioadmin123'
+            default_bucket = 'aircraft-data'
     else:
         default_endpoint = 'http://localhost:9000'
         default_access = 'minioadmin'
         default_secret = 'minioadmin123'
+        default_bucket = 'aircraft-data'
     
     parser.add_argument('--s3-endpoint', default=default_endpoint,
                         help=f'S3/MinIO endpoint URL (default: {default_endpoint})')
@@ -2431,13 +2417,13 @@ Benefits:
                         help=f'S3 access key (default: {default_access})')
     parser.add_argument('--s3-secret-key', default=default_secret,
                         help=f'S3 secret key (default: {default_secret})')
-    parser.add_argument('--s3-bucket', default='aircraft-data',
-                        help='S3 bucket for aircraft JSON data (default: aircraft-data)')
+    parser.add_argument('--s3-bucket', default=default_bucket,
+                        help=f'S3 bucket for aircraft JSON data (default: {default_bucket})')
     parser.add_argument('--s3-kml-bucket', default='output-kmls',
                         help='S3 bucket for KML outputs (default: output-kmls)')
     parser.add_argument('--s3-flightaware-bucket', default='flighturls',
                         help='S3 bucket for FlightAware URLs (default: flighturls)')
-    parser.add_argument('--s3-reception-bucket', default='piaware-reception-data',
+    parser.add_argument('--s3-reception-bucket', default='piawarereceptiondata',
                         help='S3 bucket for reception records (default: piaware-reception-data)')
     parser.add_argument('--s3-icao-cache-bucket', default='icao-hex-cache',
                         help='S3 bucket for ICAO hex code cache (default: icao-hex-cache)')
@@ -2478,12 +2464,38 @@ Benefits:
         os.makedirs(RUNTIME_DIR)
         print(f"Created runtime directory: {RUNTIME_DIR}")
     
+    # Print S3 path and log size at startup
+    from config_reader import get_config
+    config = get_config()
+    s3_bucket = config.get('s3_bucket', 'aircraft-data')
+    s3_prefix = config.get('s3_prefix', '')
+    print(f"S3 log path: s3://{s3_bucket}/{s3_prefix}piaware_aircraft_log_*.json")
+    def calculate_s3_log_size(bucket_name: str, prefix: str) -> float:
+        """Calculate total size of all aircraft log files in S3 bucket (MB)."""
+        if not BOTO3_AVAILABLE or s3_client is None:
+            return 0.0
+        try:
+            total_bytes = 0
+            paginator = s3_client.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket_name, Prefix=prefix):
+                for obj in page.get('Contents', []):
+                    key = obj['Key']
+                    if key.startswith(prefix) and (key.endswith('.json') or key.endswith('.csv')):
+                        total_bytes += obj['Size']
+            return total_bytes / (1024 * 1024)
+        except Exception as e:
+            print(f"\033[91mError calculating S3 log size: {e}\033[0m")
+            return 0.0
+    s3_log_size = calculate_s3_log_size(s3_bucket, s3_prefix)
+    print(f"Total S3 log size: \033[96m{s3_log_size:.2f} MB\033[0m")
+    
     # Initialize S3 client if enabled, before loading records
     if args.enable_s3:
         print("Checking MinIO server status...")
         if check_and_start_minio():
             print("Initializing S3 client...")
             if initialize_s3_client(args.s3_endpoint, args.s3_access_key, args.s3_secret_key):
+                s3_upload_enabled = True  # Enable S3 uploads
                 print(f"S3 uploads enabled:")
                 print(f"  - JSON bucket: {args.s3_bucket}")
                 print(f"  - KML bucket: {args.s3_kml_bucket}")
@@ -2521,10 +2533,18 @@ Benefits:
                 populate_reception_records_from_s3(args.s3_history_hours)
             else:
                 print("S3 uploads disabled due to initialization failure")
+                import sys
+                sys.exit(1)
         else:
             print("S3 uploads disabled - MinIO server could not be started")
+            import sys
+            sys.exit(1)
     else:
         print("S3 uploads disabled (use --disable-s3 to disable)")
+    
+    print(f"S3 bucket connected: {s3_bucket_name if s3_upload_enabled else 'None'}")
+    print(f"S3 files uploaded: {s3_upload_count}")
+    print(f"Last uploaded file: {last_uploaded_file if last_uploaded_file else 'None'}")
     
     # Auto-adjust extension if needed
     if output_format == 'json' and not output_filename.endswith('.json'):
@@ -2658,6 +2678,7 @@ Benefits:
                     continue
 
                 current_time = time.time()
+                
                 # Upload minute file to S3 every 60 seconds
                 if s3_upload_enabled and current_time - last_minute_upload_time >= 60:
                     upload_minute_file_to_s3(args.s3_bucket, pending_aircraft)
@@ -2680,7 +2701,8 @@ Benefits:
                 
                 # Upload minute file to S3 (after pending aircraft flushed)
                 if s3_upload_enabled and current_time - last_minute_upload_time >= 60:  # 60 seconds = 1 minute
-                    upload_minute_file_to_s3(args.s3_bucket)
+                    upload_minute_file_to_s3(args.s3_bucket, pending_aircraft)
+                    pending_aircraft.clear()  # Clear buffer after upload
                 
                 # Check if 1 minute has passed since last KML/other uploads
                 if s3_upload_enabled and current_time - last_s3_upload_time >= 60:  # 60 seconds = 1 minute
@@ -2706,6 +2728,7 @@ Benefits:
                     print("Aircraft Tracker - Live View")
                     print(f"Monitoring: {piaware_url}")
                     print(f"Update: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                    print(f"S3: {s3_bucket_name} | Uploads: {s3_upload_count} | Last: {last_uploaded_file}")
                     print("=" * 70 + "\033[0m\n")
                     
                     print(f"Currently tracking: \033[93m{len(aircraft_tracking)}\033[0m aircraft")
@@ -2735,10 +2758,6 @@ Benefits:
                     print(f"\033[96m│\033[0m Last day:         {positions_1day:>5} positions  ({rate_1day:>6.1f}/min){' '*(10)} \033[96m│\033[0m")
                     print(f"\033[96m└─────────────────────────────────────────────────────────┘\033[0m")
                     print()
-                    
-                    print(f"Current file: \033[92m{current_file}\033[0m")
-                    if previous_file:
-                        print(f"Previous file: \033[90m{previous_file}\033[0m")
                     
                     # Display last S3 upload time
                     if s3_upload_enabled and last_s3_upload_time > 0:
@@ -2996,6 +3015,8 @@ Benefits:
                 print("Uploading final KML files to S3...")
                 upload_to_s3(s3_bucket_name, s3_kml_bucket_name)
         
+        # Clear buffer at shutdown
+            pending_aircraft.clear()
         print("\n\033[92mAircraft Tracker Stopped\033[0m")
         print(f"Total aircraft tracked: {len(aircraft_tracking)}")
         print(f"Position reports (24h): {position_reports_24h:,}")
