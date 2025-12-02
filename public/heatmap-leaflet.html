@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aircraft Heatmap - 1nm Grid</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+        }
+
+        #map {
+            height: calc(100vh - 200px);
+            width: 100%;
+            border: 1px solid #333;
+        }
+
+        .header {
+            padding: 15px;
+            background: #2a2a2a;
+            border-bottom: 1px solid #333;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 500;
+            color: #bbb;
+            min-width: 100px;
+        }
+
+        select, input {
+            padding: 6px 10px;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            border: 1px solid #444;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 6px 15px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0052a3;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .info-panel {
+            padding: 15px;
+            background: #2a2a2a;
+            border-top: 1px solid #333;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .info-card {
+            background: #1e1e1e;
+            padding: 12px;
+            border-radius: 4px;
+            border-left: 3px solid #0066cc;
+        }
+
+        .info-card strong {
+            display: block;
+            color: #0066cc;
+            margin-bottom: 5px;
+        }
+
+        .info-card span {
+            font-size: 14px;
+            color: #bbb;
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+            z-index: 400;
+            max-width: 300px;
+            font-size: 12px;
+            color: #333;
+        }
+
+        .legend h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            margin-right: 8px;
+        }
+
+        .error {
+            background: #c62828;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛩️ Aircraft Position Grid (1nm × 1nm) - Leaflet</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="time-window">Time Window:</label>
+                <select id="time-window">
+                    <option value="1h">1 Hour</option>
+                    <option value="4h">4 Hours</option>
+                    <option value="12h">12 Hours</option>
+                    <option value="24h" selected>24 Hours</option>
+                    <option value="7d">7 Days</option>
+                    <option value="all">All Time</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="color-mode">Color:</label>
+                <select id="color-mode">
+                    <option value="intensity" selected>Intensity</option>
+                    <option value="density">Density Gradient</option>
+                    <option value="altitude">Altitude-based</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="scaling-mode">Scaling:</label>
+                <select id="scaling-mode">
+                    <option value="linear" selected>Linear</option>
+                    <option value="log">Logarithmic</option>
+                    <option value="sqrt">Square Root</option>
+                    <option value="power">Power (γ=2.2)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="opacity">Opacity:</label>
+                <input type="range" id="opacity" min="0.1" max="1.0" step="0.1" value="0.7" style="width: 100px;">
+                <span id="opacity-value">0.7</span>
+            </div>
+
+            <div class="control-group">
+                <label for="show-borders">
+                    <input type="checkbox" id="show-borders" checked> Show Borders
+                </label>
+            </div>
+
+            <button onclick="loadGridData()">🔄 Refresh</button>
+            <button onclick="toggleLegend()">📋 Legend</button>
+            <button onclick="resetMap()">🏠 Reset View</button>
+        </div>
+
+        <div id="error" class="error"></div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="info-panel">
+        <div class="info-card">
+            <strong>Grid Cells</strong>
+            <span id="cell-count">Loading...</span>
+        </div>
+        <div class="info-card">
+            <strong>Total Positions</strong>
+            <span id="point-count">Loading...</span>
+        </div>
+        <div class="info-card">
+            <strong>Load Time</strong>
+            <span id="load-time">Loading...</span>
+        </div>
+        <div class="info-card">
+            <strong>Max Density</strong>
+            <span id="max-density">Loading...</span>
+        </div>
+        <div class="info-card">
+            <strong>Coverage Area</strong>
+            <span id="coverage-area">Loading...</span>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Loading grid data...</p>
+    </div>
+
+    <div id="legend" class="legend" style="display: none;">
+        <h4>Position Density</h4>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(0, 0, 255, 0.3);"></div>
+            <span>Low (1-10)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(0, 255, 0, 0.5);"></div>
+            <span>Medium (11-50)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(255, 255, 0, 0.7);"></div>
+            <span>High (51-200)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: rgba(255, 0, 0, 0.8);"></div>
+            <span>Very High (200+)</span>
+        </div>
+    </div>
+
+    <script>
+        // Initialize map centered on typical aircraft tracking area (adjust for your region)
+        const map = L.map('map').setView([39.5, -98.0], 4); // Center on USA
+
+        // Add OpenStreetMap base layer
+        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18
+        });
+
+        // Add aviation chart layers using ChartBundle tiles
+        const skyVectorIFRLayer = L.tileLayer('https://wms.chartbundle.com/tms/1.0.0/sec/{z}/{x}/{y}.png', {
+            attribution: 'FAA Sectional Charts © ChartBundle',
+            maxZoom: 12,
+            tms: true
+        });
+
+        // Add VFR Sectional Chart layer (FAA Terminal Area Charts)
+        const skyVectorVFRLayer = L.tileLayer('https://wms.chartbundle.com/tms/1.0.0/tac/{z}/{x}/{y}.png', {
+            attribution: 'FAA Terminal Area Charts © ChartBundle',
+            maxZoom: 12,
+            tms: true
+        });
+
+        // Layer control
+        const baseLayers = {
+            "OpenStreetMap": osmLayer
+        };
+        
+        const overlayLayers = {
+            "Sectional Charts (ChartBundle)": skyVectorIFRLayer,
+            "Terminal Area Charts (ChartBundle)": skyVectorVFRLayer
+        };
+        
+        osmLayer.addTo(map);
+        L.control.layers(baseLayers, overlayLayers).addTo(map);
+
+        let gridLayer = null;
+        let currentData = null;
+
+        // Update opacity display
+        document.getElementById('opacity').addEventListener('input', (e) => {
+            document.getElementById('opacity-value').textContent = e.target.value;
+            if (currentData) updateGridDisplay();
+        });
+
+        document.getElementById('color-mode').addEventListener('change', () => {
+            if (currentData) updateGridDisplay();
+        });
+
+        document.getElementById('show-borders').addEventListener('change', () => {
+            if (currentData) updateGridDisplay();
+        });
+
+        document.getElementById('time-window').addEventListener('change', loadGridData);
+
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.classList.add('show');
+            setTimeout(() => errorDiv.classList.remove('show'), 5000);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('active', show);
+        }
+
+        // Convert lat/lon distance to degrees (approximation)
+        function nmToDegrees(nm) {
+            // 1 degree latitude ≈ 60 nm
+            return nm / 60;
+        }
+
+        // Get color based on intensity
+        function getColorForIntensity(value, max, mode = 'intensity') {
+            // Get scaling mode from UI
+            const scalingModeElem = document.getElementById('scaling-mode');
+            const scalingMode = scalingModeElem ? scalingModeElem.value : 'linear';
+            let normalized = 0;
+            if (scalingMode === 'log') {
+                normalized = Math.log(value + 1) / Math.log(max + 1);
+            } else if (scalingMode === 'sqrt') {
+                normalized = Math.sqrt(value) / Math.sqrt(max);
+            } else if (scalingMode === 'power') {
+                normalized = Math.pow(value, 1/2.2) / Math.pow(max, 1/2.2);
+            } else {
+                normalized = value / max;
+            }
+            if (mode === 'intensity') {
+                // Blue -> Green -> Yellow -> Red gradient
+                if (normalized < 0.25) {
+                    return `rgb(0, 0, ${Math.floor(255 * (normalized / 0.25))})`;
+                } else if (normalized < 0.5) {
+                    return `rgb(0, ${Math.floor(255 * ((normalized - 0.25) / 0.25))}, 255)`;
+                } else if (normalized < 0.75) {
+                    return `rgb(0, 255, ${Math.floor(255 * (1 - (normalized - 0.5) / 0.25))})`;
+                } else {
+                    return `rgb(${Math.floor(255 * ((normalized - 0.75) / 0.25))}, 255, 0)`;
+                }
+            } else if (mode === 'density') {
+                // Red scale
+                const red = Math.floor(255 * normalized);
+                return `rgb(${red}, 0, 0)`;
+            }
+            return 'rgb(100, 100, 100)';
+                document.getElementById('scaling-mode').addEventListener('change', () => {
+                    if (currentData) updateGridDisplay();
+                });
+        }
+
+        async function loadGridData() {
+            try {
+                showLoading(true);
+                const timeWindow = document.getElementById('time-window').value;
+                const startTime = Date.now();
+
+                const response = await fetch(`/api/heatmap?window=${timeWindow}`);
+                if (!response.ok) throw new Error(`API error: ${response.status}`);
+
+                const gridData = await response.json();
+                const loadTime = Date.now() - startTime;
+
+                let totalPositions = 0;
+                let minLat = Infinity, maxLat = -Infinity;
+                let minLon = Infinity, maxLon = -Infinity;
+                let maxCount = 0;
+
+                gridData.forEach(cell => {
+                    if (cell.count > 0) {
+                        totalPositions += cell.count;
+                        maxCount = Math.max(maxCount, cell.count);
+                        minLat = Math.min(minLat, cell.lat_min);
+                        maxLat = Math.max(maxLat, cell.lat_max);
+                        minLon = Math.min(minLon, cell.lon_min);
+                        maxLon = Math.max(maxLon, cell.lon_max);
+                    }
+                });
+
+                currentData = {
+                    gridCells: gridData,
+                    totalPositions,
+                    maxCount,
+                    bounds: { minLat, maxLat, minLon, maxLon }
+                };
+
+                // Update grid display
+                updateGridDisplay();
+
+                // Update info panel
+                document.getElementById('cell-count').textContent = gridData.filter(c => c.count > 0).length;
+                document.getElementById('point-count').textContent = totalPositions.toLocaleString();
+                document.getElementById('load-time').textContent = `${loadTime}ms`;
+                document.getElementById('max-density').textContent = maxCount;
+                
+                const latSpan = (maxLat - minLat).toFixed(2);
+                const lonSpan = (maxLon - minLon).toFixed(2);
+                document.getElementById('coverage-area').textContent = 
+                    `${latSpan}° × ${lonSpan}° (${gridData.filter(c => c.count > 0).length} cells)`;
+
+                showLoading(false);
+
+            } catch (error) {
+                showLoading(false);
+                showError(`Failed to load grid data: ${error.message}`);
+            }
+        }
+
+        function updateGridDisplay() {
+            if (!currentData || currentData.gridCells.length === 0) return;
+
+            // Remove old layer
+            if (gridLayer) map.removeLayer(gridLayer);
+
+            const opacity = parseFloat(document.getElementById('opacity').value);
+            const colorMode = document.getElementById('color-mode').value;
+            const showBorders = document.getElementById('show-borders').checked;
+
+            // Create feature group for all grid cells
+            gridLayer = L.featureGroup([]);
+
+            currentData.gridCells.forEach(cell => {
+                if (cell.count === 0) return;
+
+                // Create rectangle for 1nm x 1nm grid cell
+                const bounds = [
+                    [cell.lat_min, cell.lon_min],
+                    [cell.lat_max, cell.lon_max]
+                ];
+
+                const color = getColorForIntensity(cell.count, currentData.maxCount, colorMode);
+
+                const rectangle = L.rectangle(bounds, {
+                    color: showBorders ? '#333' : color,
+                    weight: showBorders ? 1 : 0,
+                    fillColor: color,
+                    fillOpacity: opacity,
+                    className: 'grid-cell'
+                });
+
+                // Add popup with cell info
+                rectangle.bindPopup(`
+                    <strong>Grid Cell</strong><br>
+                    Lat: ${cell.lat_min.toFixed(4)}° to ${cell.lat_max.toFixed(4)}°<br>
+                    Lon: ${cell.lon_min.toFixed(4)}° to ${cell.lon_max.toFixed(4)}°<br>
+                    <strong>Positions: ${cell.count}</strong>
+                `);
+
+                gridLayer.addLayer(rectangle);
+            });
+
+            gridLayer.addTo(map);
+
+            // Fit bounds to data
+            if (currentData.bounds.minLat !== Infinity) {
+                map.fitBounds([
+                    [currentData.bounds.minLat, currentData.bounds.minLon],
+                    [currentData.bounds.maxLat, currentData.bounds.maxLon]
+                ]);
+            }
+        }
+
+        function resetMap() {
+            map.setView([39.5, -98.0], 4);
+        }
+
+        function toggleLegend() {
+            const legend = document.getElementById('legend');
+            legend.style.display = legend.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Load initial data
+        loadGridData();
+    </script>
+</body>
+</html>

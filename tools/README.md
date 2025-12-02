@@ -35,6 +35,7 @@ This directory contains all the utility scripts and tools for the Aircraft Dashb
 - `process-airlines.js` - Process airline data
 - `registration_lookup.py` - Aircraft registration lookup
 - `upload-airline-db.js` - Upload airline database to S3
+- `upload-media-pack.js` - Upload logo media pack ZIP to S3
 - `upload-to-s3.js` - General S3 upload utility
 - `upload-types.js` - Upload aircraft types to S3
 

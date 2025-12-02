@@ -9,6 +9,7 @@ module.exports = {
         port: process.env.PORT || 3002,
         logFile: process.env.LOG_FILE || 'runtime/server.log',
         accessLogFile: process.env.ACCESS_LOG_FILE || 'runtime/access.log',
+        w3cLogDir: process.env.W3C_LOG_DIR || 'runtime/logs',  // Directory for W3C format logs
     },
 
     // --- Data Source Configuration ---
@@ -32,6 +33,7 @@ module.exports = {
     buckets: {
         readBucket: process.env.READ_BUCKET || 'aircraft-data',           // Historical data
         writeBucket: process.env.WRITE_BUCKET || 'aircraft-data-new',     // Current data
+        s3Prefix: 'aircraft-data/', // S3 object key prefix for aircraft tracker uploads
     },
 
     // --- State Management ---

@@ -161,13 +161,69 @@ function setupApiRoutes(app, s3, bucketName) {
         }
     });
 
+    app.get('/api/aircraft-types', async (req, res) => {
+        try {
+            const fs = require('fs').promises;
+            const data = await fs.readFile('aircraft_types.json', 'utf8');
+            const aircraftTypes = JSON.parse(data);
+            res.json(aircraftTypes);
+        } catch (error) {
+            console.error('Error loading aircraft types:', error);
+            res.status(500).json({ error: 'Failed to load aircraft types' });
+        }
+    });
+
+    app.get('/api/airlines', async (req, res) => {
+        try {
+            const fs = require('fs').promises;
+            const data = await fs.readFile('airline_database.json', 'utf8');
+            const airlines = JSON.parse(data);
+            res.json(airlines);
+        } catch (error) {
+            console.error('Error loading airlines:', error);
+            res.status(500).json({ error: 'Failed to load airlines' });
+        }
+    });
+
     app.get('/api/heatmap', async (req, res) => {
         try {
+            const { airline, type, manufacturer, window } = req.query;
             const files = await listS3Files(s3, bucketName);
             const positions = [];
+            
+            // Determine time window
+            let cutoffTime = null;
+            if (window && window !== 'all') {
+                const now = new Date();
+                if (window === '1h') cutoffTime = new Date(now.getTime() - 60 * 60 * 1000);
+                else if (window === '4h') cutoffTime = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+                else if (window === '12h') cutoffTime = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+                else if (window === '24h') cutoffTime = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                else if (window === '7d') cutoffTime = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            }
+            
             for (const file of files) {
                 const records = await downloadAndParseS3File(s3, bucketName, file);
                 for (const record of records) {
+                    // Apply time filter
+                    if (cutoffTime && record.Timestamp) {
+                        const recordTime = new Date(record.Timestamp);
+                        if (recordTime < cutoffTime) continue;
+                    }
+                    
+                    // Apply airline filter
+                    if (airline && record.Flight) {
+                        const callsign = record.Flight || '';
+                        const flightAirline = callsign.substring(0, 3).toUpperCase();
+                        if (flightAirline !== airline.toUpperCase()) continue;
+                    }
+                    
+                    // Apply type filter
+                    if (type && record.Typecode && record.Typecode !== type) continue;
+                    
+                    // Apply manufacturer filter
+                    if (manufacturer && record.Manufacturer && record.Manufacturer !== manufacturer) continue;
+                    
                     if (record.Latitude && record.Longitude) {
                         positions.push([record.Latitude, record.Longitude]);
                     }

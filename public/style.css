@@ -1,0 +1,285 @@
+/* Dark Mode Theme */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #1a1a1a;
+  color: #e0e0e0;
+  margin: 0;
+  padding: 20px;
+}
+
+h1, h2, h3 {
+  color: #ffffff;
+}
+
+/* Restart Button */
+.restart-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: #0d7377;
+  color: #fff;
+  border: 2px solid #14ffec;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.restart-button:hover {
+  background-color: #0a5a5d;
+  transform: scale(1.05);
+}
+
+.restart-button:active {
+  transform: scale(0.95);
+}
+
+/* Tabs */
+.tabs {
+  margin-bottom: 20px;
+  border-bottom: 2px solid #333;
+}
+
+.tab-button {
+  padding: 12px 20px;
+  cursor: pointer;
+  border: none;
+  background-color: #2a2a2a;
+  color: #aaa;
+  margin-right: 2px;
+  transition: all 0.3s ease;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tab-button:hover {
+  background-color: #333;
+  color: #fff;
+}
+
+.tab-button.active {
+  background-color: #0d7377;
+  color: #fff;
+  border-bottom: 3px solid #14ffec;
+}
+
+.tab-content {
+  display: none;
+  animation: fadeIn 0.3s;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Status */
+#connection-status {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 12px;
+  background-color: #2a2a2a;
+  z-index: 1000;
+}
+
+.status-connected {
+  color: #4caf50;
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.status-disconnected {
+  color: #f44336;
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.status-connecting {
+  color: #ff9800;
+  background-color: rgba(255, 152, 0, 0.1);
+}
+
+/* Live Stats */
+#live-stats {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  border-left: 4px solid #0d7377;
+}
+
+#live-stats div {
+  font-size: 14px;
+  color: #aaa;
+}
+
+#live-stats span {
+  color: #14ffec;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+table th, table td {
+  border: 1px solid #3a3a3a;
+  padding: 12px 8px;
+  text-align: left;
+}
+
+table th {
+  background-color: #1f1f1f;
+  color: #14ffec;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+table tbody tr:hover {
+  background-color: #333;
+}
+
+table tbody tr:nth-child(even) {
+  background-color: #252525;
+}
+
+/* Table Sorting */
+.sortable th {
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+.sortable th:hover {
+    background-color: #2a2a2a;
+}
+
+.sortable th::after {
+    content: '';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    margin-top: -3px;
+    border: 5px solid transparent;
+    opacity: 0.3;
+}
+
+.sortable th.sort-asc::after {
+    border-bottom-color: #14ffec;
+    opacity: 1;
+}
+
+.sortable th.sort-desc::after {
+    border-top-color: #14ffec;
+    opacity: 1;
+}
+
+/* Form Controls */
+input[type="number"],
+input[type="text"],
+select {
+  background-color: #2a2a2a;
+  color: #e0e0e0;
+  border: 1px solid #3a3a3a;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+input[type="number"]:focus,
+input[type="text"]:focus,
+select:focus {
+  outline: none;
+  border-color: #0d7377;
+  box-shadow: 0 0 0 2px rgba(13, 115, 119, 0.2);
+}
+
+button {
+  background-color: #0d7377;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s ease;
+}
+
+button:hover {
+  background-color: #0a5a5d;
+}
+
+button:active {
+  transform: scale(0.98);
+}
+
+label {
+  color: #aaa;
+  font-size: 14px;
+  margin-right: 8px;
+}
+
+input[type="checkbox"] {
+  margin-right: 5px;
+  cursor: pointer;
+}
+
+/* Canvas */
+canvas {
+  border: 1px solid #3a3a3a !important;
+  background-color: #1a1a1a;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+/* Divs and Sections */
+div {
+  margin-bottom: 10px;
+}
+
+/* Logo Cells */
+.logo-cell {
+  /* Use default row background */
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}

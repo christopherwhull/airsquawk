@@ -3,6 +3,9 @@ const express = require('express');
 const { setupApiRoutes } = require('../lib/api-routes');
 
 // Mock S3 client and other dependencies
+jest.mock('../lib/s3-helpers');
+const { listS3Files, downloadAndParseS3File } = require('../lib/s3-helpers');
+
 const mockS3 = {
   send: jest.fn()
 };
@@ -59,6 +62,47 @@ describe('API Routes', () => {
       expect(response.body).toHaveProperty('apiCache');
       expect(response.body).toHaveProperty('logoCache');
       expect(response.body).toHaveProperty('logoCoverage');
+    });
+  });
+
+  describe('GET /api/heatmap', () => {
+    beforeEach(() => {
+      // Mock the S3 helpers
+      listS3Files.mockResolvedValue([
+        { Key: 'data/piaware_aircraft_log_20251128_1800.json' }
+      ]);
+      downloadAndParseS3File.mockResolvedValue([
+        {
+          ICAO: 'testicao',
+          Ident: 'TEST123',
+          Aircraft_type: 'B737',
+          Latitude: 40.0,
+          Longitude: -74.0,
+          Timestamp: new Date().toISOString()
+        }
+      ]);
+    });
+
+    test('should return heatmap positions', async () => {
+      const response = await request(app)
+        .get('/api/heatmap?window=1h')
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
+      // Should return positions as [lat, lon] arrays
+      if (response.body.length > 0) {
+        expect(response.body[0]).toHaveLength(2);
+        expect(typeof response.body[0][0]).toBe('number');
+        expect(typeof response.body[0][1]).toBe('number');
+      }
+    });
+
+    test('should filter by airline', async () => {
+      const response = await request(app)
+        .get('/api/heatmap?window=1h&airline=TEST')
+        .expect(200);
+
+      expect(Array.isArray(response.body)).toBe(true);
     });
   });
 

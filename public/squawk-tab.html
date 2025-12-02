@@ -1,0 +1,21 @@
+    <div id="squawk-tab" class="tab-content">
+        <h2>Squawk Code Transition Analysis</h2>
+        <div>
+            <label for="squawk-hours">Window (hours):</label>
+            <select id="squawk-hours" onchange="loadSquawkTransitions()">
+                <option value="1">1 Hour</option>
+                <option value="24" selected>24 Hours</option>
+                <option value="168">7 Days</option>
+            </select>
+            <button onclick="loadSquawkTransitions()">Refresh</button>
+        </div>
+        <div id="squawk-summary"></div>
+        <h3>VFR Transitions (1200)</h3>
+        <ul id="vfr-transitions"></ul>
+        <h3>IFR Transitions</h3>
+        <ul id="ifr-transitions"></ul>
+        <h3>LOW/HIGH IFR Transitions</h3>
+        <ul id="low-high-ifr-transitions"></ul>
+        <h3>Special Transitions (7500, 7600, 7700)</h3>
+        <ul id="special-transitions"></ul>
+    </div>

@@ -750,3 +750,88 @@ Expected: All 13 tests pass
 - Indexed search capabilities
 - Progressive data loading
 - WebWorker for heavy computations
+
+---
+
+## Aircraft Tracker Functions (tools/aircraft_tracker.py)
+
+### S3 Database Functions
+
+#### `_load_aircraft_type_database_from_s3()`
+**Purpose:** Loads the comprehensive aircraft type database from S3 for enrichment lookups.
+
+**Returns:** Dictionary mapping ICAO hex codes to aircraft data
+
+**Functionality:**
+- Loads `aircraft_type_database.json` from `aircraft-data` S3 bucket
+- Contains 236,752 aircraft entries with type and registration data
+- Caches in memory for performance
+- Graceful fallback if S3 unavailable
+
+**Usage:** Called automatically during aircraft enrichment process
+
+---
+
+#### `get_aircraft_type_from_s3_db(hex_code: str)`
+**Purpose:** Looks up aircraft type and registration from the S3 database.
+
+**Parameters:**
+- `hex_code` (str): ICAO hex code of the aircraft
+
+**Returns:** Dictionary with 'registration' and 'type' keys, or empty dict if not found
+
+**Functionality:**
+- Queries the loaded S3 aircraft type database
+- Returns structured data for enrichment pipeline
+- Fast in-memory lookup after initial load
+
+**Usage:** Primary enrichment source in aircraft data processing
+
+---
+
+### Enrichment Pipeline Functions
+
+#### `get_db_info(hex_code: str)`
+**Purpose:** Legacy function for PiAware static database API lookup.
+
+**Parameters:**
+- `hex_code` (str): ICAO hex code of the aircraft
+
+**Returns:** Dictionary with aircraft data or empty dict
+
+**Functionality:**
+- Makes HTTP requests to PiAware aircraft database API
+- Progressive prefix matching (3, 2, 1 character prefixes)
+- Rate-limited external API calls
+- Used as fallback when S3 sources unavailable
+
+**Usage:** Final fallback in enrichment pipeline
+
+---
+
+### Data Processing Functions
+
+#### `enrich_aircraft_data(aircraft_info: dict, hex_code: str)`
+**Purpose:** Main enrichment function that applies all lookup sources to aircraft data.
+
+**Parameters:**
+- `aircraft_info` (dict): Raw aircraft data from PiAware
+- `hex_code` (str): ICAO hex code for lookups
+
+**Returns:** Enriched aircraft dictionary with type, registration, and airline data
+
+**Enrichment Priority:**
+1. Live PiAware data (if available)
+2. History cache (recently seen aircraft)
+3. **S3 aircraft type database** (NEW - primary source)
+4. S3 ICAO cache (individual aircraft files)
+5. PiAware static database API (external)
+6. Local fallback databases
+
+**Functionality:**
+- Applies multi-source enrichment pipeline
+- Caches successful lookups to S3
+- Maintains data quality and consistency
+- Handles missing data gracefully
+
+**Usage:** Called for every aircraft during tracking process

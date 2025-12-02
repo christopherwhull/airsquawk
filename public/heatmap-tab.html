@@ -1,0 +1,154 @@
+    <div id="heatmap-tab" class="tab-content">
+        <h2>Aircraft Position Heatmap</h2>
+
+        <div id="heatmap-controls" style="margin-bottom:8px;">
+            <label for="heatmap-window">Time Window:</label>
+            <select id="heatmap-window">
+                <option value="1h">1h</option>
+                <option value="4h">4h</option>
+                <option value="12h">12h</option>
+                <option value="24h" selected>24h</option>
+                <option value="7d">7d</option>
+                <option value="all">ALL dates</option>
+            </select>
+
+            <label for="heatmap-airline" style="margin-left:15px;">Airline:</label>
+            <select id="heatmap-airline">
+                <option value="">All Airlines</option>
+            </select>
+
+            <label for="heatmap-type" style="margin-left:15px;">Type:</label>
+            <select id="heatmap-type">
+                <option value="">All Types</option>
+            </select>
+
+            <label for="heatmap-manufacturer" style="margin-left:15px;">Manufacturer:</label>
+            <select id="heatmap-manufacturer">
+                <option value="">All Manufacturers</option>
+            </select>
+
+            <span id="generate-heatmap-status" style="margin-left:10px;color:#444"></span>
+        </div>
+
+        <div id="heatmap-scale-controls" style="margin-bottom:8px; padding:8px; background:#f5f5f5; border-radius:4px;">
+            <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                <!-- Basic Controls -->
+                <div>
+                    <label for="heatmap-scale-type" style="font-weight:bold;">Scale:</label>
+                    <select id="heatmap-scale-type">
+                        <option value="log" selected>Logarithmic</option>
+                        <option value="linear">Linear</option>
+                        <option value="sqrt">Square Root</option>
+                        <option value="power">Power (γ=2.2)</option>
+                        <option value="exp">Exponential</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="heatmap-color-scheme" style="font-weight:bold;">Colors:</label>
+                    <select id="heatmap-color-scheme">
+                        <option value="red" selected>Red</option>
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
+                        <option value="rainbow">Rainbow</option>
+                        <option value="plasma">Plasma</option>
+                        <option value="viridis">Viridis</option>
+                        <option value="magma">Magma</option>
+                        <option value="inferno">Inferno</option>
+                        <option value="cividis">Cividis</option>
+                        <option value="coolwarm">Cool Warm</option>
+                        <option value="seismic">Seismic</option>
+                    </select>
+                </div>
+
+                <!-- Advanced Controls Row 1 -->
+                <div style="border-left:1px solid #ccc; padding-left:10px;">
+                    <label for="heatmap-intensity-range">Intensity:</label>
+                    <input type="range" id="heatmap-intensity-range" min="5" max="90" value="40" step="5" style="width:60px;">
+                    <span id="intensity-value" style="font-size:11px;">40</span>
+                </div>
+
+                <div>
+                    <label for="heatmap-saturation">Saturation:</label>
+                    <input type="range" id="heatmap-saturation" min="0" max="100" value="100" step="5" style="width:60px;">
+                    <span id="saturation-value" style="font-size:11px;">100</span>
+                </div>
+
+                <div>
+                    <label for="heatmap-lightness">Lightness:</label>
+                    <input type="range" id="heatmap-lightness" min="20" max="80" value="50" step="5" style="width:60px;">
+                    <span id="lightness-value" style="font-size:11px;">50</span>
+                </div>
+
+                <div>
+                    <label for="heatmap-opacity">Opacity:</label>
+                    <input type="range" id="heatmap-opacity" min="0.1" max="1.0" value="1.0" step="0.1" style="width:60px;">
+                    <span id="opacity-value" style="font-size:11px;">1.0</span>
+                </div>
+
+                <!-- Advanced Controls Row 2 -->
+                <div style="width:100%; border-top:1px solid #ddd; padding-top:8px; margin-top:8px;">
+                    <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+                        <div>
+                            <label for="heatmap-blur">Blur:</label>
+                            <input type="range" id="heatmap-blur" min="0" max="5" value="0" step="0.5" style="width:50px;">
+                            <span id="blur-value" style="font-size:11px;">0</span>
+                        </div>
+
+                        <div>
+                            <label for="heatmap-gamma">Gamma:</label>
+                            <input type="range" id="heatmap-gamma" min="0.1" max="3.0" value="1.0" step="0.1" style="width:50px;">
+                            <span id="gamma-value" style="font-size:11px;">1.0</span>
+                        </div>
+
+                        <div>
+                            <label for="heatmap-min-value">Min:</label>
+                            <input type="number" id="heatmap-min-value" placeholder="auto" style="width:50px;">
+                        </div>
+
+                        <div>
+                            <label for="heatmap-max-value">Max:</label>
+                            <input type="number" id="heatmap-max-value" placeholder="auto" style="width:50px;">
+                        </div>
+
+                        <div>
+                            <label for="heatmap-grid-size">Grid:</label>
+                            <select id="heatmap-grid-size" style="width:60px;">
+                                <option value="auto" selected>Auto</option>
+                                <option value="0.01">0.01°</option>
+                                <option value="0.02">0.02°</option>
+                                <option value="0.05">0.05°</option>
+                                <option value="0.1">0.1°</option>
+                                <option value="0.2">0.2°</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="heatmap-interpolation">Interp:</label>
+                            <select id="heatmap-interpolation" style="width:70px;">
+                                <option value="none" selected>None</option>
+                                <option value="linear">Linear</option>
+                                <option value="cubic">Cubic</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <input type="checkbox" id="heatmap-show-legend" checked>
+                            <label for="heatmap-show-legend" style="font-size:11px;">Legend</label>
+                        </div>
+
+                        <div>
+                            <button id="heatmap-reset-scale" style="font-size:11px; padding:2px 8px;">Reset</button>
+                        </div>
+
+                        <div>
+                            <button id="heatmap-save-preset" style="font-size:11px; padding:2px 8px;">Save</button>
+                            <button id="heatmap-load-preset" style="font-size:11px; padding:2px 8px;">Load</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="heatmap-canvas" width="800" height="600"></canvas>
+    </div>

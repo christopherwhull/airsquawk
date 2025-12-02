@@ -4,6 +4,7 @@ Turn raw ADS‑B feeds from a PiAware receiver into actionable, real-time flight
 
 Why it matters:
 - Real-time situational awareness: See live aircraft positions and telemetry with minimal latency.
+- **Comprehensive Aircraft Intelligence**: Automatic enrichment with aircraft types, registrations, and airline data from 236K+ aircraft database.
 - Deep analytics: Track flights, squawk transitions, and aggregate per-airline statistics.
 - Secure & private: Run fully on-premise with MinIO/S3 for optional archival and controlled data retention.
 - Extensible & open source: Integrate with PiAware and customize the data pipeline to meet your needs.

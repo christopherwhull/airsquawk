@@ -5,12 +5,14 @@ Reads configuration values from the main config.js file
 import re
 import os
 
+_config = None  # Global config cache
+
 def read_config():
     """
     Parse config.js and extract configuration values
     Returns a dictionary with configuration settings
     """
-    config_path = os.path.join(os.path.dirname(__file__), 'config.js')
+    config_path = os.path.join(os.path.dirname(__file__), '..', 'config.js')
     
     config = {
         's3_endpoint': 'http://localhost:9000',

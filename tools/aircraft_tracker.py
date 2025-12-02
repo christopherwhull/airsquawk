@@ -265,6 +265,52 @@ def get_aircraft_data() -> List[dict]:
         return []
 
 
+# Global cache for aircraft type database from S3
+_aircraft_type_db = None
+
+def _load_aircraft_type_database_from_s3():
+    """Load aircraft type database from S3."""
+    global _aircraft_type_db
+    if _aircraft_type_db is not None:
+        return _aircraft_type_db
+    
+    try:
+        obj_data = s3_client.get_object(Bucket=s3_bucket_name, Key='aircraft_type_database.json')
+        content = obj_data['Body'].read().decode('utf-8')
+        data = json.loads(content)
+        _aircraft_type_db = data.get('aircraft', {})
+        print(f"\033[92mLoaded aircraft type database from S3 with {len(_aircraft_type_db)} entries\033[0m")
+        return _aircraft_type_db
+    except ClientError as e:
+        print(f"\033[91mError loading aircraft type database from S3: {e}\033[0m")
+        _aircraft_type_db = {}
+        return _aircraft_type_db
+    except Exception as e:
+        print(f"\033[91mUnexpected error loading aircraft type database: {e}\033[0m")
+        _aircraft_type_db = {}
+        return _aircraft_type_db
+
+def get_aircraft_type_from_s3_db(hex_code: str) -> dict:
+    """Get aircraft type and registration from S3 database."""
+    if not s3_upload_enabled or not s3_client:
+        return {}
+    
+    # Load database if not already loaded
+    db = _load_aircraft_type_database_from_s3()
+    
+    # Normalize hex_code to lowercase for lookup
+    hex_code_lower = hex_code.lower()
+    entry = db.get(hex_code_lower)
+    
+    if entry and isinstance(entry, dict):
+        return {
+            'registration': entry.get('registration'),
+            'type': entry.get('type')
+        }
+    
+    return {}
+
+
 def get_db_info(hex_code: str) -> dict:
     """Lookup aircraft registration and type from static database."""
     global db_cache
@@ -366,7 +412,15 @@ def update_aircraft_tracking(current_aircraft: List[dict]) -> None:
                 if aircraft_type == 'N/A' and 't' in hist:
                     aircraft_type = hist['t']
             
-            # If not in live data or history, try the S3 ICAO cache.
+            # Try S3 aircraft type database first (most comprehensive)
+            s3_db_data = get_aircraft_type_from_s3_db(hex_code)
+            if s3_db_data:
+                if registration in (None, 'N/A', '') and 'registration' in s3_db_data:
+                    registration = s3_db_data['registration']
+                if aircraft_type in (None, 'N/A', '') and 'type' in s3_db_data:
+                    aircraft_type = s3_db_data['type']
+            
+            # If not in live data, history, or S3 database, try the S3 ICAO cache.
             # Prefer cached values when the live value is missing or 'N/A'.
             cached_data = get_icao_cache_from_s3(hex_code)
             if cached_data:
@@ -378,7 +432,7 @@ def update_aircraft_tracking(current_aircraft: List[dict]) -> None:
                 if aircraft_type in (None, 'N/A', ''):
                     aircraft_type = cached_data.get('type', aircraft_type)
             
-            # If not in live data, history, or cache, lookup from static database
+            # If not in live data, history, S3 database, or cache, lookup from PiAware static database
             if registration == 'N/A' or aircraft_type == 'N/A':
                 db_info = get_db_info(hex_code)
                 if registration == 'N/A' and 'r' in db_info:

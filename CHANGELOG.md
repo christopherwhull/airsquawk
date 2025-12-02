@@ -2,6 +2,26 @@
 
 All notable changes to the Aircraft Dashboard project will be documented in this file.
 
+## [1.2.0] - 2025-12-01
+
+### Added
+- **S3 Database Enrichment**: Complete overhaul of aircraft data enrichment to use comprehensive S3-stored databases instead of local files and external APIs
+- **Aircraft Type Database Integration**: Added `aircraft_type_database.json` (236,752 entries) from S3 for primary aircraft type and registration lookup
+- **Airline Database Integration**: Added `airline_database.json` (5,774 entries) from S3 for comprehensive airline name lookup
+- **Enhanced Enrichment Pipeline**: Reordered enrichment priority to use S3 databases first, then ICAO cache, then PiAware API as fallback
+- **Database Caching**: In-memory caching of S3 databases for improved performance and reduced API calls
+
+### Changed
+- **Aircraft Tracker Enrichment**: Modified `aircraft_tracker.py` to load and use S3 aircraft type database as primary enrichment source
+- **Lookup Functions**: Updated `airline_lookup.py` and `registration_lookup.py` (both root and tools versions) to load from S3 databases
+- **Enrichment Priority**: S3 databases now take precedence over individual ICAO cache files and external API calls
+
+### Technical Details
+- **Database Sources**: `aircraft_type_database.json` and `airline_database.json` from `aircraft-data` S3 bucket
+- **Coverage**: 236K+ aircraft registrations/types, 5.7K+ airline codes with comprehensive global coverage
+- **Performance**: Single database load vs. individual file fetches, reduced external dependencies
+- **Reliability**: Automatic fallback to local files and PiAware API when S3 unavailable
+
 ## [1.1.1] - 2025-12-01
 
 ### Fixed

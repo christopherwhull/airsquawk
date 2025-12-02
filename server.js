@@ -282,11 +282,17 @@ const accessLogStream = fs.createWriteStream(path.join(__dirname, config.server.
 
 // Use W3C Extended Log Format if enabled, otherwise use Morgan format
 if (config.logging.enableW3C) {
-    const { logW3C } = require('./lib/logger');
+    const { logW3C, initializeW3CLogger } = require('./lib/logger');
+    initializeW3CLogger(config);
     app.use(logW3C);
 } else {
     app.use(morgan(config.logging.format, { stream: accessLogStream }));
 }
+
+// --- Heatmap Viewer Routes ---
+app.get('/heatmap-leaflet', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'heatmap-leaflet.html'));
+});
 
 // --- API Routes (will be set up in initialize()) ---
 
@@ -337,7 +343,7 @@ async function saveState() {
     try {
         const state = {
             aircraftTracking,
-            positionHistory: positionHistory.slice(-10000), // Save last 10k positions to limit file size
+            positionHistory: positionHistory.slice(-1000000), // Save last 1M positions to limit file size
             runningPositionCount,
             trackerStartTime,
             receiver_lat,
@@ -1382,7 +1388,7 @@ const fetchData = async () => {
                 }
 
                 // Add to 24-hour position history
-                positionHistory.push({
+                const position = {
                     hex: ac.hex,
                     flight: ac.flight,
                     lat: ac.lat,
@@ -1394,7 +1400,11 @@ const fetchData = async () => {
                     registration: ac.registration,
                     aircraft_type: ac.aircraft_type,
                     airline: ac.airline
-                });
+                };
+                positionHistory.push(position);
+                
+                // Add to position cache for long-term storage
+                positionCache.addPosition(position);
                 
                 // Track squawk code changes
                 if (ac.squawk) {

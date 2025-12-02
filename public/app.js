@@ -516,11 +516,13 @@ function formatTimeAgo(timestamp) {
 }
 
 // --- Tab Management ---
-function showTab(tabName) {
+function showTab(tabName, event) {
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`${tabName}-tab`).classList.add('active');
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
 
     if (tabName === 'airlines') {
         loadAirlineStats();
@@ -539,7 +541,12 @@ function showTab(tabName) {
     if (tabName === 'heatmap') {
         loadHeatmap();
     }
-        if (tabName === 'reception') loadReceptionRange();
+    if (tabName === 'reception') {
+        loadReceptionRange();
+    }
+    if (tabName === 'cache') {
+        loadCacheStatus();
+    }
 }
 
 async function loadHistoricalStats() {
@@ -2485,263 +2492,6 @@ async function loadFlights(hoursBack = null) {
     }
 }
 
-async function loadHeatmap(hoursBack = null) {
-    const rawDataContainer = document.getElementById('heatmap-raw-data');
-    const canvas = document.getElementById('heatmap-canvas');
-    const totalPositionsDisplay = document.getElementById('heatmap-total-positions');
-    const timestampsDisplay = document.getElementById('heatmap-timestamps');
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    try {
-        rawDataContainer.textContent = 'Loading...';
-        totalPositionsDisplay.textContent = '';
-        timestampsDisplay.textContent = '';
-        
-        const startElem = document.getElementById('heatmap-start-time');
-        const endElem = document.getElementById('heatmap-end-time');
-        
-        // Helper function to format timestamp as local datetime string
-        const formatLocalDateTime = (timestamp) => {
-            const d = new Date(timestamp);
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            const hours = String(d.getHours()).padStart(2, '0');
-            const minutes = String(d.getMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${minutes}`;
-        };
-        
-        let hours = 24; // default
-        
-        // If hoursBack is provided, use it (from quick buttons)
-        if (hoursBack !== null) {
-            const now = new Date();
-            const endTime = now.getTime();
-            const startTime = endTime - (hoursBack * 60 * 60 * 1000);
-            
-            // Update input fields
-            startElem.value = formatLocalDateTime(startTime);
-            endElem.value = formatLocalDateTime(endTime);
-            
-            hours = hoursBack;
-        }
-        // Use custom times if set
-        else if (startElem && startElem.value && endElem && endElem.value) {
-            // Calculate hours difference for window parameter
-            const parseLocalDateTime = (localDateTimeStr) => {
-                const parts = localDateTimeStr.split('T');
-                const [year, month, day] = parts[0].split('-');
-                const [hours, minutes] = parts[1].split(':');
-                return new Date(year, month - 1, day, hours, minutes, 0, 0).getTime();
-            };
-            
-            const startTime = parseLocalDateTime(startElem.value);
-            let endTime = parseLocalDateTime(endElem.value);
-            
-            // Auto-update end time if it's recent
-            const now = Date.now();
-            const twoMinutesAgo = now - (2 * 60 * 1000);
-            if (endTime >= twoMinutesAgo) {
-                endTime = now;
-                endElem.value = formatLocalDateTime(endTime);
-            }
-            
-            hours = Math.ceil((endTime - startTime) / (60 * 60 * 1000));
-        }
-        // Default to last 24 hours
-        else {
-            const now = new Date();
-            const endTime = now.getTime();
-            const startTime = endTime - (24 * 60 * 60 * 1000);
-            
-            startElem.value = formatLocalDateTime(startTime);
-            endElem.value = formatLocalDateTime(endTime);
-            
-            hours = 24;
-        }
-        
-        const response = await fetch(`/api/heatmap-data?hours=${hours}`);
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        
-        // Handle both old format (array) and new format (object with grid property)
-        const gridData = data.grid || data;
-        const totalPositions = data.totalPositions || 0;
-        const firstPosition = data.firstPosition;
-        const lastPosition = data.lastPosition;
-        
-        rawDataContainer.textContent = JSON.stringify(gridData, null, 2);
-        
-        // Calculate grid statistics
-        const gridInfoElem = document.getElementById('heatmap-grid-info');
-        const scaleMaxElem = document.getElementById('heatmap-scale-max');
-        
-        if (Array.isArray(gridData) && gridData.length > 0) {
-            // Get first cell to determine grid size
-            const firstCell = gridData[0];
-            const latSize = Math.abs(firstCell.lat_max - firstCell.lat_min);
-            const lonSize = Math.abs(firstCell.lon_max - firstCell.lon_min);
-            
-            // Calculate approximate grid cell dimensions in km and NM
-            // At mid-latitudes, 1 degree lat ≈ 111 km, 1 degree lon ≈ 111 * cos(lat) km
-            const avgLat = (firstCell.lat_min + firstCell.lat_max) / 2;
-            const latKm = (latSize * 111).toFixed(1);
-            const lonKm = (lonSize * 111 * Math.cos(avgLat * Math.PI / 180)).toFixed(1);
-            const latNM = (latKm / 1.852).toFixed(1);
-            const lonNM = (lonKm / 1.852).toFixed(1);
-            
-            // Find max count for scale
-            let maxCount = 0;
-            gridData.forEach(cell => {
-                if (cell.count > maxCount) maxCount = cell.count;
-            });
-            
-            // Calculate coverage area
-            let minLon = gridData[0].lon_min, maxLon = gridData[0].lon_max;
-            let minLat = gridData[0].lat_min, maxLat = gridData[0].lat_max;
-            gridData.forEach(cell => {
-                if (cell.lon_min < minLon) minLon = cell.lon_min;
-                if (cell.lon_max > maxLon) maxLon = cell.lon_max;
-                if (cell.lat_min < minLat) minLat = cell.lat_min;
-                if (cell.lat_max > maxLat) maxLat = cell.lat_max;
-            });
-            const coverageLat = (maxLat - minLat).toFixed(2);
-            const coverageLon = (maxLon - minLon).toFixed(2);
-            
-            gridInfoElem.innerHTML = `
-                <div><strong>Grid Cell Size:</strong> ${latSize.toFixed(4)}° × ${lonSize.toFixed(4)}° (${latNM} NM × ${lonNM} NM, or ${latKm} km × ${lonKm} km)</div>
-                <div><strong>Total Grid Cells:</strong> ${gridData.length.toLocaleString()}</div>
-                <div><strong>Coverage Area:</strong> ${coverageLat}° latitude × ${coverageLon}° longitude</div>
-                <div><strong>Coordinates:</strong> ${minLat.toFixed(2)}° to ${maxLat.toFixed(2)}° N, ${minLon.toFixed(2)}° to ${maxLon.toFixed(2)}° W</div>
-            `;
-            
-            scaleMaxElem.textContent = maxCount.toLocaleString();
-        } else {
-            gridInfoElem.textContent = 'No grid data available';
-            scaleMaxElem.textContent = '0';
-        }
-
-        // Display total positions and timestamps
-        totalPositionsDisplay.textContent = `Total Positions: ${(totalPositions || gridData.reduce((sum, cell) => sum + (cell.count || 0), 0)).toLocaleString()}`;
-        
-        // Display first and last positions
-        if (firstPosition || lastPosition) {
-            let timestampText = '';
-            if (firstPosition && lastPosition) {
-                const firstDate = new Date(firstPosition);
-                const lastDate = new Date(lastPosition);
-                timestampText = `First: ${firstDate.toLocaleString()} | Last: ${lastDate.toLocaleString()}`;
-            } else if (firstPosition) {
-                timestampText = `First: ${new Date(firstPosition).toLocaleString()}`;
-            } else if (lastPosition) {
-                timestampText = `Last: ${new Date(lastPosition).toLocaleString()}`;
-            }
-            if (timestampText) {
-                timestampsDisplay.textContent = timestampText;
-            }
-        }
-
-        // If a dedicated renderer is available (exposed as window.renderHeatmap), use it.
-        if (typeof window.renderHeatmap === 'function') {
-            window.renderHeatmap(gridData, canvas);
-            return;
-        }
-
-        // Fallback: inline rendering if the external renderer is not present
-        if (!gridData || gridData.length === 0) {
-            ctx.fillStyle = '#666';
-            ctx.font = '14px sans-serif';
-            ctx.fillText('No heatmap data available for this time period.', 10, 20);
-            return;
-        }
-
-        // --- (Fallback) Find Data Boundaries ---
-        let minLon = gridData[0].lon_min, maxLon = gridData[0].lon_max;
-        let minLat = gridData[0].lat_min, maxLat = gridData[0].lat_max;
-        let maxCount = 0;
-
-        gridData.forEach(cell => {
-            if (cell.lon_min < minLon) minLon = cell.lon_min;
-            if (cell.lon_max > maxLon) maxLon = cell.lon_max;
-            if (cell.lat_min < minLat) minLat = cell.lat_min;
-            if (cell.lat_max > maxLat) maxLat = cell.lat_max;
-            if (cell.count > maxCount) maxCount = cell.count;
-        });
-
-        const lonRange = maxLon - minLon || 1;
-        const latRange = maxLat - minLat || 1;
-        
-        const pad = { top: 20, right: 20, bottom: 40, left: 60 };
-        const chartWidth = canvas.width - pad.left - pad.right;
-        const chartHeight = canvas.height - pad.top - pad.bottom;
-
-        // --- Draw Grid Cells (fallback) ---
-        gridData.forEach(cell => {
-            const x = pad.left + ((cell.lon_min - minLon) / lonRange) * chartWidth;
-            const y = pad.top + chartHeight - (((cell.lat_max - minLat) / latRange) * chartHeight);
-            const cellWidth = ((cell.lon_max - cell.lon_min) / lonRange) * chartWidth;
-            const cellHeight = ((cell.lat_max - cell.lat_min) / latRange) * chartHeight;
-
-            const intensity = Math.sqrt((cell.count || 0) / (maxCount || 1));
-            const hue = 240 - (intensity * 240);
-            const color = `hsl(${hue}, 100%, 50%)`;
-
-            ctx.fillStyle = color;
-            ctx.fillRect(x, y, cellWidth, cellHeight);
-        });
-
-        // --- Draw Axes and Labels (fallback) ---
-        ctx.strokeStyle = '#333';
-        ctx.fillStyle = '#333';
-        ctx.font = '12px sans-serif';
-        ctx.lineWidth = 1;
-
-        // Y-axis (Latitude)
-        ctx.beginPath();
-        ctx.moveTo(pad.left, pad.top);
-        ctx.lineTo(pad.left, pad.top + chartHeight);
-        ctx.stroke();
-        for (let i = 0; i <= 5; i++) {
-            const lat = minLat + (latRange * i / 5);
-            const y = pad.top + chartHeight - (i / 5 * chartHeight);
-            ctx.fillText(lat.toFixed(2), 5, y + 4);
-            ctx.beginPath();
-            ctx.moveTo(pad.left - 5, y);
-            ctx.lineTo(pad.left, y);
-            ctx.stroke();
-        }
-
-        // X-axis (Longitude)
-        ctx.beginPath();
-        ctx.moveTo(pad.left, pad.top + chartHeight);
-        ctx.lineTo(pad.left + chartWidth, pad.top + chartHeight);
-        ctx.stroke();
-        ctx.textAlign = 'center';
-        for (let i = 0; i <= 5; i++) {
-            const lon = minLon + (lonRange * i / 5);
-            const x = pad.left + (i / 5 * chartWidth);
-            ctx.fillText(lon.toFixed(2), x, pad.top + chartHeight + 15);
-            ctx.beginPath();
-            ctx.moveTo(x, pad.top + chartHeight);
-            ctx.lineTo(x, pad.top + chartHeight + 5);
-            ctx.stroke();
-        }
-        ctx.textAlign = 'left';
-
-    } catch (error) {
-        console.error('Error loading heatmap data:', error);
-        const rawDataContainer = document.getElementById('heatmap-raw-data');
-        rawDataContainer.textContent = `Error: ${error.message}`;
-        totalPositionsDisplay.textContent = '';
-        timestampsDisplay.textContent = '';
-    }
-}
-
 async function summarizeText() {
     const text = document.getElementById('gemini-input').value;
     const output = document.getElementById('gemini-output');
@@ -2972,74 +2722,191 @@ async function remakeHourlyRollup() {
     }
 }
 
-// --- Cache Status Function ---
+// --- Heatmap Filtering Functionality ---
+async function loadHeatmap() {
+    const canvas = document.getElementById('heatmap-canvas');
+    const ctx = canvas.getContext('2d');
+    const positionsElem = document.getElementById('heatmap-total-positions');
+    
+    try {
+        positionsElem.textContent = 'Loading...';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const timeWindow = document.getElementById('heatmap-window').value;
+        const airline = document.getElementById('heatmap-airline').value;
+        const type = document.getElementById('heatmap-type').value;
+        const manufacturer = document.getElementById('heatmap-manufacturer').value;
+        
+        // Build query parameters
+        const params = new URLSearchParams({ window: timeWindow });
+        if (airline) params.append('airline', airline);
+        if (type) params.append('type', type);
+        if (manufacturer) params.append('manufacturer', manufacturer);
+        
+        console.log('Loading heatmap with params:', Object.fromEntries(params));
+        
+        const response = await fetch(`/api/heatmap?${params}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const gridData = await response.json();
+        console.log(`Received ${gridData.length} grid cells for heatmap`);
+        console.log('First 3 grid cells:', gridData.slice(0, 3));
+        
+        // Calculate total positions across all grid cells
+        let totalPositions = 0;
+        for (const cell of gridData) {
+            totalPositions += cell.count || 0;
+        }
+        
+        // Render the heatmap
+        if (typeof window.renderHeatmap === 'function') {
+            console.log('Calling renderHeatmap with', gridData.length, 'grid cells containing', totalPositions, 'positions');
+            window.renderHeatmap(gridData, canvas);
+        } else {
+            console.warn('renderHeatmap function not available, using fallback');
+            ctx.fillStyle = '#666';
+            ctx.font = '14px sans-serif';
+            ctx.fillText(`Heatmap with ${gridData.length} grid cells (${totalPositions} positions)`, 10, 20);
+        }
+        
+        positionsElem.textContent = `${totalPositions.toLocaleString()} positions in ${gridData.length} grid cells`;
+        
+    } catch (error) {
+        console.error('Error loading heatmap:', error);
+        positionsElem.textContent = `Error: ${error.message}`;
+        ctx.fillStyle = '#f44336';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(`Error: ${error.message}`, 10, 20);
+    }
+}
+
+// --- Heatmap Filtering Functionality ---
+
+async function populateHeatmapFilters() {
+    try {
+        // Populate airline dropdown with common airlines
+        const airlineSelect = document.getElementById('heatmap-airline');
+        if (airlineSelect) {
+            const commonAirlines = ['UAL', 'AAL', 'DAL', 'SWA', 'JBU', 'ENY', 'RPA'];
+            commonAirlines.forEach(code => {
+                const option = document.createElement('option');
+                option.value = code;
+                option.textContent = code;
+                airlineSelect.appendChild(option);
+            });
+        }
+        
+        // Populate type dropdown with common types
+        const typeSelect = document.getElementById('heatmap-type');
+        if (typeSelect) {
+            const commonTypes = ['B737', 'B738', 'A320', 'A321', 'C172', 'BE36'];
+            commonTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeSelect.appendChild(option);
+            });
+        }
+        
+        // Populate manufacturer dropdown
+        const manufacturerSelect = document.getElementById('heatmap-manufacturer');
+        if (manufacturerSelect) {
+            const commonManufacturers = ['Boeing', 'Airbus', 'Cessna', 'Beechcraft', 'Piper'];
+            commonManufacturers.forEach(manu => {
+                const option = document.createElement('option');
+                option.value = manu;
+                option.textContent = manu;
+                manufacturerSelect.appendChild(option);
+            });
+            // Set Boeing as default for testing
+            manufacturerSelect.value = 'Boeing';
+        }
+        
+        console.log('Heatmap filters populated');
+        
+    } catch (error) {
+        console.warn('Could not populate heatmap filters:', error.message);
+    }
+}
+
+// --- Cache Status Functions ---
 async function loadCacheStatus() {
     try {
-        const response = await fetch('/api/cache-status');
-        const stats = await response.json();
+        const response = await fetch('/api/heatmap-stats');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
         
-        const display = document.getElementById('cache-status-display');
+        const data = await response.json();
         
-        // Format aircraft database status
-        const aircraftDbStatus = stats.aircraftDatabase || {};
-        const dbStatusIcon = aircraftDbStatus.loaded ? '✓' : '✗';
-        const dbStatusColor = aircraftDbStatus.loaded ? '#4caf50' : '#f44336';
-        const dbStatusText = aircraftDbStatus.loaded ? 'Loaded' : 'Not Loaded';
-        
-        display.innerHTML = `
-<strong>Position Cache:</strong>
-  Total Positions: ${stats.positionCache.totalPositions.toLocaleString()}
-  Unique Aircraft: ${stats.positionCache.uniqueAircraft}
-  Last Refresh: ${stats.positionCache.lastRefresh}
-  Memory Usage: ${stats.positionCache.cacheMemoryMb} MB
-
-<strong style="color: ${dbStatusColor};">Aircraft Database (ICAO→Registration): ${dbStatusIcon} ${dbStatusText}</strong>
-  Aircraft Records: ${(aircraftDbStatus.aircraftCount || 0).toLocaleString()}
-  Data Source: ${aircraftDbStatus.source || 'Unknown'}
-  Last Downloaded: ${aircraftDbStatus.downloaded || 'Unknown'}
-  API Endpoint: <span style="color: #42a5f5;">/api/aircraft/:icao24</span>
-
-<strong style="color: #7b1fa2;">Type Database (Typecode→Manufacturer/Model): ${(stats.typeDatabase && stats.typeDatabase.loaded) ? '✓' : '✗'}</strong>
-    Types: ${(stats.typeDatabase && stats.typeDatabase.typeCount) ? stats.typeDatabase.typeCount.toLocaleString() : 0}
-    Version: ${stats.typeDatabase && stats.typeDatabase.version ? stats.typeDatabase.version : 'Unknown'}
-    Created: ${stats.typeDatabase && stats.typeDatabase.created ? stats.typeDatabase.created : 'Unknown'}
-    API Endpoint: <span style="color: #42a5f5;">/api/aircraft-types/:typecode</span>
-
-<strong>API Cache:</strong>
-  Historical Stats Entries: ${stats.apiCache.historicalStats}
-  Squawk Transitions Entries: ${stats.apiCache.squawkTransitions}
-  Airline Stats Entries: ${stats.apiCache.airlineStats}
-
-<strong style="color: #ff9800;">Logo System:</strong>
-  <strong>S3 Storage:</strong>
-    Total Logo Files: ${stats.logoCoverage.logosInS3.toLocaleString()}
-  <strong>Database Coverage:</strong>
-    Airlines with Logos: ${stats.logoCoverage.airlinesWithLogos}/${stats.logoCoverage.totalAirlines} (${stats.logoCoverage.totalAirlines > 0 ? ((stats.logoCoverage.airlinesWithLogos / stats.logoCoverage.totalAirlines) * 100).toFixed(1) : 0}%)
-    Manufacturers with Logos: ${stats.logoCoverage.manufacturersWithLogos}/${stats.logoCoverage.totalManufacturers} (${stats.logoCoverage.totalManufacturers > 0 ? ((stats.logoCoverage.manufacturersWithLogos / stats.logoCoverage.totalManufacturers) * 100).toFixed(1) : 0}%)
-  <strong>Cache Performance:</strong>
-    Cached Logos: ${stats.logoCache.cachedLogos}
-    Total Requests: ${stats.logoCache.totalRequests.toLocaleString()}
-    Cache Hit Rate: ${stats.logoCache.totalRequests > 0 ? ((stats.logoCache.cacheHits / stats.logoCache.totalRequests) * 100).toFixed(1) : 0}%
-  API Endpoint: <span style="color: #42a5f5;">/api/v1logos/:code</span>
-
-<strong>S3 Operations:</strong>
-  Read Operations: ${stats.s3Operations.reads.toLocaleString()}
-  Write Operations: ${stats.s3Operations.writes.toLocaleString()}
-  Errors: ${stats.s3Operations.errors.toLocaleString()}
-  Last File Read: ${stats.s3Operations.lastRead}
-  Last File Written: ${stats.s3Operations.lastWrite}
-
-<strong>Last Processing Times:</strong>
-  Flights: ${stats.lastProcessing.flights}
-  Airlines: ${stats.lastProcessing.airlines}
-  Squawks: ${stats.lastProcessing.squawks}
-  Heatmap: ${stats.lastProcessing.heatmap}
-  Positions (Historical): ${stats.lastProcessing.positions}
-  Hourly Rollup: ${stats.lastProcessing.hourlyRollup}
-        `.trim();
+        const statusDiv = document.getElementById('cache-status');
+        if (statusDiv) {
+            let html = `<div style="margin-bottom: 10px;"><strong>📈 Total Positions:</strong> ${data.totalPositions.toLocaleString()}</div>`;
+            html += `<div style="margin-bottom: 10px;"><strong>✈️ With Aircraft Type:</strong> ${data.positionsWithType.toLocaleString()} (${((data.positionsWithType / data.totalPositions) * 100).toFixed(1)}%)</div>`;
+            html += `<div style="margin-bottom: 10px;"><strong>🏭 With Manufacturer:</strong> ${data.positionsWithManufacturer.toLocaleString()} (${((data.positionsWithManufacturer / data.totalPositions) * 100).toFixed(1)}%)</div>`;
+            
+            if (data.dateRange && data.dateRange.hasTimestamps) {
+                html += `<div style="margin-bottom: 10px;"><strong>📅 Date Range:</strong> ${data.dateRange.minDate} to ${data.dateRange.maxDate}</div>`;
+                html += `<div style="margin-bottom: 10px;"><strong>⏱️ Span:</strong> ${data.dateRange.spanDays} days (${data.dateRange.spanHours} hours)</div>`;
+            } else {
+                html += `<div style="margin-bottom: 10px; color: #ff9800;"><strong>⚠️ No Timestamps:</strong> Position data lacks timestamp information</div>`;
+            }
+            
+            html += `<div style="margin-bottom: 10px;"><strong>🔝 Top Manufacturers:</strong></div>`;
+            html += `<div style="margin-left: 20px; margin-bottom: 10px;">`;
+            Object.entries(data.topManufacturers).slice(0, 5).forEach(([manufacturer, count]) => {
+                html += `<div>${manufacturer}: ${count.toLocaleString()}</div>`;
+            });
+            html += `</div>`;
+            
+            html += `<div style="margin-bottom: 10px;"><strong>🛩️ Top Aircraft Types:</strong></div>`;
+            html += `<div style="margin-left: 20px;">`;
+            Object.entries(data.topTypes).slice(0, 5).forEach(([type, count]) => {
+                html += `<div>${type}: ${count.toLocaleString()}</div>`;
+            });
+            html += `</div>`;
+            
+            statusDiv.innerHTML = html;
+        }
     } catch (error) {
         console.error('Error loading cache status:', error);
-        document.getElementById('cache-status-display').innerHTML = 'Error loading cache status: ' + error.message;
+        const statusDiv = document.getElementById('cache-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = `<div style="color: #f44336;">❌ Error loading cache status: ${error.message}</div>`;
+        }
+    }
+}
+
+async function clearHeatmapCache() {
+    try {
+        const response = await fetch('/api/heatmap-cache-clear', {
+            method: 'GET'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        // Show success message
+        const statusDiv = document.getElementById('cache-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = `<div style="color: #4caf50;">✅ ${data.message}</div>`;
+        }
+        
+        // Reload cache status after a short delay
+        setTimeout(loadCacheStatus, 2000);
+        
+    } catch (error) {
+        console.error('Error clearing cache:', error);
+        const statusDiv = document.getElementById('cache-status');
+        if (statusDiv) {
+            statusDiv.innerHTML = `<div style="color: #f44336;">❌ Error clearing cache: ${error.message}</div>`;
+        }
     }
 }
 
@@ -3048,4 +2915,22 @@ window.addEventListener('DOMContentLoaded', () => {
     setTimeout(loadCacheStatus, 1000);
     // Auto-refresh every 30 seconds
     setInterval(loadCacheStatus, 30000);
+    
+    // Add event listeners for dropdown changes to auto-load heatmap
+    const dropdowns = ['heatmap-window', 'heatmap-airline', 'heatmap-type', 'heatmap-manufacturer'];
+    dropdowns.forEach(id => {
+        const elem = document.getElementById(id);
+        if (elem) {
+            elem.addEventListener('change', () => {
+                console.log(`${id} changed, loading heatmap...`);
+                loadHeatmap();
+            });
+        }
+    });
+    
+    // Populate heatmap filters
+    populateHeatmapFilters();
+    
+    // Load initial heatmap with 7 days default
+    loadHeatmap();
 });

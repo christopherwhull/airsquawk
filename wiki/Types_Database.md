@@ -2,6 +2,32 @@
 
 The repository includes a curated aircraft types database (`aircraft_types.json`) mapping ICAO type codes to manufacturer, model, and body type. Use this database to enrich flight and aircraft data shown in the UI and included in API responses.
 
+## S3 Database Enrichment (NEW)
+
+**Primary Enrichment System**: The aircraft tracker now uses comprehensive S3-stored databases for aircraft intelligence:
+
+### Aircraft Type Database
+- **File**: `aircraft_type_database.json` in `aircraft-data` S3 bucket
+- **Coverage**: 236,752 aircraft entries worldwide
+- **Data**: ICAO hex code → aircraft type + registration mappings
+- **Usage**: Primary source for aircraft type and registration enrichment
+
+### Airline Database  
+- **File**: `airline_database.json` in `aircraft-data` S3 bucket
+- **Coverage**: 5,774 airline entries worldwide
+- **Data**: Airline codes → full names + logo URLs
+- **Usage**: Primary source for airline name lookup from callsigns
+
+### Enrichment Priority
+1. **S3 Databases** (NEW - primary source)
+2. **ICAO Cache** (individual aircraft files)
+3. **PiAware API** (external fallback)
+4. **Local Files** (emergency fallback)
+
+## Legacy Types Database
+
+The original curated types database provides manufacturer/model information:
+
 ## What is included
 - manufacturer: e.g., Boeing, Airbus
 - model: Full model string (e.g. "Boeing 737-800")

@@ -8,6 +8,8 @@ Python script that monitors PiAware aircraft data and uploads to S3/MinIO for th
 - Minute-by-minute S3 uploads with hourly rollup files
 - Reception range analysis with bearing/altitude tracking
 - KML file generation for Google Earth visualization
+- **S3 Database Enrichment**: Comprehensive aircraft type and registration lookup from S3-stored databases (236K+ aircraft, 5.7K+ airlines)
+- **Multi-Source Enrichment Pipeline**: Prioritized enrichment from S3 databases → ICAO cache → PiAware API → local fallbacks
 - Aircraft type database integration
 - Automatic deduplication and data quality checks
 - Cross-platform support (Windows/Linux)
@@ -125,6 +127,52 @@ On startup, the script:
 4. Resumes tracking with full context
 
 This ensures no data loss after crashes or restarts.
+
+## Aircraft Enrichment
+
+The tracker automatically enriches aircraft data with type, registration, and airline information using a multi-source pipeline:
+
+### Enrichment Sources (Priority Order)
+
+1. **S3 Aircraft Type Database** - Primary source with 236,752 aircraft entries
+   - File: `aircraft_type_database.json` in `aircraft-data` bucket
+   - Contains: ICAO hex → aircraft type + registration mappings
+   - Coverage: Global fleet with comprehensive type information
+
+2. **S3 Airline Database** - Airline name lookup from callsigns
+   - File: `airline_database.json` in `aircraft-data` bucket  
+   - Contains: 5,774 airline codes → full names + logos
+   - Coverage: IATA/ICAO airline codes worldwide
+
+3. **S3 ICAO Cache** - Individual aircraft cache files
+   - Files: `{hex_code}.json` in `icao-hex-cache` bucket
+   - Contains: Cached enrichment data per aircraft
+   - Updated: When new aircraft discovered
+
+4. **PiAware Static Database** - External API fallback
+   - Source: PiAware aircraft database API
+   - Used: When S3 sources unavailable
+   - Rate-limited: External dependency
+
+5. **Local Fallbacks** - Emergency local databases
+   - Files: `airline_database.json`, `registration_db.json`
+   - Used: When all remote sources fail
+
+### Enrichment Process
+
+For each aircraft, the tracker:
+1. Extracts callsign, hex code, and basic data from ADS-B
+2. Looks up airline from callsign (first 3 characters)
+3. Looks up aircraft type and registration from hex code
+4. Caches successful lookups to S3 for future use
+5. Stores enriched data in position records
+
+### Performance Benefits
+
+- **Comprehensive Coverage**: 236K+ aircraft in primary database
+- **Reduced API Calls**: S3 databases eliminate external dependencies  
+- **Fast Lookups**: In-memory caching of database files
+- **Reliability**: Multiple fallback sources ensure enrichment always works
 
 ## Platform Notes
 
