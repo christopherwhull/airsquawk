@@ -12,7 +12,7 @@
     "restart:windows": "powershell -ExecutionPolicy Bypass -File restart-server.ps1",
     "restart:unix": "bash restart-server.sh",
     "check-server": "node tools/check_server_restart.js",
-    "restart:node": "powershell -ExecutionPolicy Bypass -File tools/restart-node-server.ps1",
+    "restart:node": "python tools/restart_server.py",
     "restart:auto": "node tools/check_and_restart_server.js --auto-restart",
     "start:pm2": "npx pm2 start server.js --name aircraft-dashboard || npx pm2 start server.js --name aircraft-dashboard --update-env",
     "restart:pm2": "npx pm2 restart aircraft-dashboard",

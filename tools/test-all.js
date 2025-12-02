@@ -26,9 +26,13 @@ async function main() {
   const jestExit = await runCmd('Jest (npm test)', 'npm', ['test']);
   failures += jestExit ? 1 : 0;
 
-  // 2) Python test suite (integration, endpoint and all-scripts) - detect python if present
+  // 2) Run time window API test
+  const timeWindowExit = await runCmd('Time Window API Test', 'node', ['tools/test-timewindow-api.js'], { cwd: rootDir });
+  failures += timeWindowExit ? 1 : 0;
 
-  // 3) On Windows run the Python-based test script (cross-platform)
+  // 3) Python test suite (integration, endpoint and all-scripts) - detect python if present
+
+  // 4) On Windows run the Python-based test script (cross-platform)
   const pythonCmds = ['python3', 'python'];
   let pythonCmd = null;
   const { execSync } = require('child_process');

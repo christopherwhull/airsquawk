@@ -219,8 +219,8 @@
             <div class="control-group">
                 <label for="scaling-mode">Scaling:</label>
                 <select id="scaling-mode">
-                    <option value="linear" selected>Linear</option>
-                    <option value="log">Logarithmic</option>
+                    <option value="linear">Linear</option>
+                    <option value="log" selected>Logarithmic</option>
                     <option value="sqrt">Square Root</option>
                     <option value="power">Power (γ=2.2)</option>
                 </select>
@@ -336,21 +336,86 @@
         let gridLayer = null;
         let currentData = null;
 
+        // Cookie management functions
+        function setCookie(name, value, days = 365) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            document.cookie = `${name}=${value};expires=${date.toUTCString()};path=/`;
+        }
+
+        function getCookie(name) {
+            const nameEQ = name + "=";
+            const ca = document.cookie.split(';');
+            for (let i = 0; i < ca.length; i++) {
+                let c = ca[i];
+                while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+                if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+            }
+            return null;
+        }
+
+        function saveSettings() {
+            const settings = {
+                timeWindow: document.getElementById('time-window').value,
+                colorMode: document.getElementById('color-mode').value,
+                scalingMode: document.getElementById('scaling-mode').value,
+                opacity: document.getElementById('opacity').value,
+                showBorders: document.getElementById('show-borders').checked
+            };
+            setCookie('leafletHeatmapSettings', JSON.stringify(settings));
+        }
+
+        function loadSettings() {
+            const saved = getCookie('leafletHeatmapSettings');
+            if (saved) {
+                try {
+                    const settings = JSON.parse(saved);
+                    if (settings.timeWindow) document.getElementById('time-window').value = settings.timeWindow;
+                    if (settings.colorMode) document.getElementById('color-mode').value = settings.colorMode;
+                    if (settings.scalingMode) document.getElementById('scaling-mode').value = settings.scalingMode;
+                    if (settings.opacity) {
+                        document.getElementById('opacity').value = settings.opacity;
+                        document.getElementById('opacity-value').textContent = settings.opacity;
+                    }
+                    if (settings.showBorders !== undefined) document.getElementById('show-borders').checked = settings.showBorders;
+                } catch (e) {
+                    console.error('Error loading settings:', e);
+                }
+            } else {
+                // Set default scaling to logarithmic if no saved settings
+                document.getElementById('scaling-mode').value = 'log';
+            }
+        }
+
+        // Load settings on page load
+        loadSettings();
+
         // Update opacity display
         document.getElementById('opacity').addEventListener('input', (e) => {
             document.getElementById('opacity-value').textContent = e.target.value;
+            saveSettings();
             if (currentData) updateGridDisplay();
         });
 
         document.getElementById('color-mode').addEventListener('change', () => {
+            saveSettings();
             if (currentData) updateGridDisplay();
         });
 
         document.getElementById('show-borders').addEventListener('change', () => {
+            saveSettings();
             if (currentData) updateGridDisplay();
         });
 
-        document.getElementById('time-window').addEventListener('change', loadGridData);
+        document.getElementById('scaling-mode').addEventListener('change', () => {
+            saveSettings();
+            if (currentData) updateGridDisplay();
+        });
+
+        document.getElementById('time-window').addEventListener('change', () => {
+            saveSettings();
+            loadGridData();
+        });
 
         function showError(message) {
             const errorDiv = document.getElementById('error');
@@ -401,9 +466,6 @@
                 return `rgb(${red}, 0, 0)`;
             }
             return 'rgb(100, 100, 100)';
-                document.getElementById('scaling-mode').addEventListener('change', () => {
-                    if (currentData) updateGridDisplay();
-                });
         }
 
         async function loadGridData() {
@@ -412,11 +474,13 @@
                 const timeWindow = document.getElementById('time-window').value;
                 const startTime = Date.now();
 
+                console.log(`Loading grid data with time window: ${timeWindow}`);
                 const response = await fetch(`/api/heatmap?window=${timeWindow}`);
                 if (!response.ok) throw new Error(`API error: ${response.status}`);
 
                 const gridData = await response.json();
                 const loadTime = Date.now() - startTime;
+                console.log(`Received ${gridData.length} grid cells from API`);
 
                 let totalPositions = 0;
                 let minLat = Infinity, maxLat = -Infinity;
@@ -440,6 +504,8 @@
                     maxCount,
                     bounds: { minLat, maxLat, minLon, maxLon }
                 };
+
+                console.log(`Total positions calculated: ${totalPositions}, Max count: ${maxCount}, Cells with data: ${gridData.filter(c => c.count > 0).length}`);
 
                 // Update grid display
                 updateGridDisplay();
