@@ -6,6 +6,10 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "geotiff": "node geotiff-server.js",
+    "start:all": "concurrently \"npm start\" \"npm run geotiff\"",
+    "proxy:tiles": "node tile-proxy-server.js",
+    "precache:tiles": "node tools/precache-tiles.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
@@ -18,16 +22,21 @@
     "restart:pm2": "npx pm2 restart aircraft-dashboard",
     "restart:headless": "powershell -ExecutionPolicy Bypass -File tools/restart-server-headless.ps1",
     "test:all": "node tools/test-all.js"
+    ,
+    "enable-git-hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.937.0",
+    "acorn": "^8.15.0",
     "archiver": "^7.0.1",
     "aws-sdk": "^2.814.0",
     "axios": "^1.13.2",
     "body-parser": "^2.2.0",
     "express": "^4.17.1",
+    "geotiff": "^2.1.4-beta.1",
     "morgan": "^1.10.0",
     "node-fetch": "^2.7.0",
+    "proj4": "^2.20.2",
     "sharp": "^0.34.5",
     "socket.io": "^4.0.1",
     "yauzl": "^3.2.0"

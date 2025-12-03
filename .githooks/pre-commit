@@ -1,0 +1,13 @@
+#!/bin/sh
+# Git pre-commit hook to archive staged .html files before the commit proceeds.
+# This script delegates to the Node archiver so behavior is cross-platform.
+NODE_CMD="node"
+SCRIPT="tools/archive-staged-html.js"
+if command -v "$NODE_CMD" >/dev/null 2>&1; then
+  "$NODE_CMD" "$SCRIPT" || true
+else
+  echo "[pre-commit] node not found; skipping html archive step"
+fi
+
+# allow commit to continue regardless of archiver outcome
+exit 0
