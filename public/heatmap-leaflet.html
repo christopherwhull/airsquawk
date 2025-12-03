@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>Aircraft Heatmap - 1nm Grid</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -13,22 +16,12 @@
             box-sizing: border-box;
         }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #1e1e1e;
-            color: #e0e0e0;
-        }
-
+        /* Map container must have an explicit height for Leaflet to render */
         #map {
-            height: calc(100vh - 200px);
             width: 100%;
-            border: 1px solid #333;
-        }
-
-        .header {
-            padding: 15px;
-            background: #2a2a2a;
-            border-bottom: 1px solid #333;
+            height: calc(100vh - 340px);
+            min-height: 360px;
+            background: #111;
         }
 
         .header h1 {
@@ -99,6 +92,10 @@
             border-radius: 4px;
             border-left: 3px solid #0066cc;
         }
+
+        .status-ok { color: #76c776; }
+        .status-loading { color: #ffd166; }
+        .status-error { color: #ff6b6b; }
 
         .info-card strong {
             display: block;
@@ -234,8 +231,43 @@
 
             <div class="control-group">
                 <label for="show-borders">
-                    <input type="checkbox" id="show-borders" checked> Show Borders
+                    <input type="checkbox" id="show-borders"> Show Borders
                 </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-live">
+                    <input type="checkbox" id="show-live"> Show Live Positions
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="track-window-input">Track Window (min):</label>
+                <input id="track-window-input" type="number" min="1" max="1440" step="1" value="1" style="width:70px;">
+            </div>
+
+            <div class="control-group">
+                <label for="show-long-tracks">
+                    <input type="checkbox" id="show-long-tracks"> Show Long Tracks
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="persist-on-click">
+                    <input type="checkbox" id="persist-on-click"> Persist track on click
+                </label>
+            </div>
+
+            <div class="control-group">
+                <button id="clear-persistent-tracks" onclick="clearAllPersistentTracks()">Clear Tracks</button>
+            </div>
+
+            <div class="control-group">
+                <button id="toggle-persistent-visibility" onclick="togglePersistentVisibility()">Hide Persisted Tracks</button>
+            </div>
+
+            <div class="control-group">
+                <button id="toggle-debug-dump" onclick="toggleDebugDump()">Show Debug Dump</button>
             </div>
 
             <button onclick="loadGridData()">🔄 Refresh</button>
@@ -269,6 +301,23 @@
             <strong>Coverage Area</strong>
             <span id="coverage-area">Loading...</span>
         </div>
+        <div class="info-card">
+            <strong>Live Fetch</strong>
+            <span id="live-fetch-status" class="status-loading">idle</span>
+        </div>
+        <div class="info-card">
+            <strong>Track Fetch</strong>
+            <span id="track-fetch-status">idle</span>
+        </div>
+        <div class="info-card">
+            <strong>Persisted Tracks</strong>
+            <span id="persisted-tracks-indicator">0</span>
+            <div id="persisted-tracks-list" style="margin-top:6px;font-size:12px;color:#bbb;max-height:72px;overflow:auto"></div>
+        </div>
+        <div class="info-card" id="debug-card">
+            <strong>Debug</strong>
+            <span id="debug-panel" style="font-size:12px;color:#bbb;display:block;max-height:72px;overflow:auto">No hex selected</span>
+        </div>
     </div>
 
     <div id="loading" class="loading">
@@ -297,8 +346,17 @@
     </div>
 
     <script>
-        // Initialize map centered on typical aircraft tracking area (adjust for your region)
-        const map = L.map('map').setView([39.5, -98.0], 4); // Center on USA
+        // Initialize map centered on Great Lakes region where FAA sectional charts are available
+        const map = L.map('map').setView([42.0, -87.9], 7); // Center on Chicago/Great Lakes
+
+        // Create dedicated panes for live markers and persistent tracks so they sit above grid layers
+        map.createPane('livePane');
+        map.getPane('livePane').style.zIndex = 650; // above overlay tiles
+        map.createPane('persistentPane');
+        map.getPane('persistentPane').style.zIndex = 660; // above livePane
+        // Dedicated pane for heatmap/grid so it stays below live markers
+        map.createPane('heatmapPane');
+        map.getPane('heatmapPane').style.zIndex = 400; // below livePane/persistentPane
 
         // Add OpenStreetMap base layer
         const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -306,34 +364,80 @@
             maxZoom: 18
         });
 
-        // Add aviation chart layers using ChartBundle tiles
-        const skyVectorIFRLayer = L.tileLayer('https://wms.chartbundle.com/tms/1.0.0/sec/{z}/{x}/{y}.png', {
-            attribution: 'FAA Sectional Charts © ChartBundle',
-            maxZoom: 12,
-            tms: true
+        // Add OpenTopoMap for terrain visualization
+        const openTopoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
+            maxZoom: 17
         });
 
-        // Add VFR Sectional Chart layer (FAA Terminal Area Charts)
-        const skyVectorVFRLayer = L.tileLayer('https://wms.chartbundle.com/tms/1.0.0/tac/{z}/{x}/{y}.png', {
-            attribution: 'FAA Terminal Area Charts © ChartBundle',
+        // Add CartoDB Voyager (good for aviation - clean, labels airports)
+        const cartoVoyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '© OpenStreetMap contributors © CARTO',
+            maxZoom: 19,
+            subdomains: 'abcd'
+        });
+
+        // Official FAA IFR Low Chart from ArcGIS
+        const faaIfrLow = L.tileLayer('http://localhost:3003/tile/IFR_AreaLow/{z}/{y}/{x}', {
+            attribution: '© FAA',
             maxZoom: 12,
-            tms: true
+            minZoom: 7,
+            zIndex: 200,
+            opacity: 0.8
+        });
+
+        // Official FAA IFR High Chart
+        const faaIfrHigh = L.tileLayer('http://localhost:3003/tile/IFR_Enroute_High/{z}/{y}/{x}', {
+            attribution: '© FAA',
+            maxZoom: 12,
+            minZoom: 7,
+            zIndex: 200,
+            opacity: 0.8
+        });
+
+        // Official FAA VFR Sectional Chart
+        const faaVfrSectional = L.tileLayer('http://localhost:3003/tile/VFR_Sectional/{z}/{y}/{x}', {
+            attribution: '© FAA',
+            maxZoom: 12,
+            minZoom: 7,
+            zIndex: 200,
+            opacity: 0.8
+        });
+
+        // Official FAA VFR Terminal Area Chart
+        const faaVfrTerminal = L.tileLayer('http://localhost:3003/tile/VFR_Terminal/{z}/{y}/{x}', {
+            attribution: '© FAA',
+            maxZoom: 12,
+            minZoom: 7,
+            zIndex: 200,
+            opacity: 0.8
         });
 
         // Layer control
         const baseLayers = {
-            "OpenStreetMap": osmLayer
+            "OpenStreetMap": osmLayer,
+            "CartoDB Voyager": cartoVoyagerLayer,
+            "OpenTopoMap": openTopoLayer
         };
         
         const overlayLayers = {
-            "Sectional Charts (ChartBundle)": skyVectorIFRLayer,
-            "Terminal Area Charts (ChartBundle)": skyVectorVFRLayer
+            "FAA IFR Low": faaIfrLow,
+            "FAA IFR High": faaIfrHigh,
+            "FAA VFR Sectional": faaVfrSectional,
+            "FAA VFR Terminal Area": faaVfrTerminal
         };
         
         osmLayer.addTo(map);
-        L.control.layers(baseLayers, overlayLayers).addTo(map);
+        // Keep a handle to the layers control so we can add overlays once created
+        const layersControl = L.control.layers(baseLayers, overlayLayers).addTo(map);
+        
+        // Log when map zoom changes
+        map.on('zoomend', () => {
+            // Future zoom-based logic can go here
+        });
 
         let gridLayer = null;
+        // we'll register overlays (heatmap grid, live positions, persisted tracks) with the layers control
         let currentData = null;
 
         // Cookie management functions
@@ -361,6 +465,9 @@
                 scalingMode: document.getElementById('scaling-mode').value,
                 opacity: document.getElementById('opacity').value,
                 showBorders: document.getElementById('show-borders').checked
+                , showLive: document.getElementById('show-live').checked
+                , trackWindowMinutes: document.getElementById('track-window-input') ? document.getElementById('track-window-input').value : '1'
+                , persistOnClick: document.getElementById('persist-on-click') ? document.getElementById('persist-on-click').checked : false
             };
             setCookie('leafletHeatmapSettings', JSON.stringify(settings));
         }
@@ -378,8 +485,15 @@
                         document.getElementById('opacity-value').textContent = settings.opacity;
                     }
                     if (settings.showBorders !== undefined) document.getElementById('show-borders').checked = settings.showBorders;
+                    if (settings.showLive !== undefined) document.getElementById('show-live').checked = settings.showLive;
+                    if (settings.trackWindowMinutes !== undefined && document.getElementById('track-window-input')) {
+                        document.getElementById('track-window-input').value = settings.trackWindowMinutes;
+                    }
+                    if (settings.persistOnClick !== undefined && document.getElementById('persist-on-click')) {
+                        document.getElementById('persist-on-click').checked = settings.persistOnClick;
+                    }
                 } catch (e) {
-                    console.error('Error loading settings:', e);
+                    console.error('!!! CRITICAL ERROR loading settings:', e);
                 }
             } else {
                 // Set default scaling to logarithmic if no saved settings
@@ -389,6 +503,19 @@
 
         // Load settings on page load
         loadSettings();
+
+        
+
+        // If saved settings requested live updates, start them now
+        try {
+            const showLiveElem = document.getElementById('show-live');
+            if (showLiveElem && showLiveElem.checked) {
+                // Defer starting live positions until after initialization to avoid TDZ issues
+                setTimeout(() => { try { toggleLivePositions(); } catch (e) { console.warn('Auto-start toggle failed', e); } }, 50);
+            }
+        } catch (e) {
+            console.warn('Failed to auto-start live positions:', e);
+        }
 
         // Update opacity display
         document.getElementById('opacity').addEventListener('input', (e) => {
@@ -417,6 +544,35 @@
             loadGridData();
         });
 
+        // Live positions toggle
+        document.getElementById('show-live').addEventListener('change', () => {
+            saveSettings();
+            toggleLivePositions();
+        });
+
+        // Show long tracks toggle
+        const longTracksCheckbox = document.getElementById('show-long-tracks');
+        if (longTracksCheckbox) {
+            longTracksCheckbox.addEventListener('change', () => {
+                saveSettings();
+                try {
+                    if (longTracksCheckbox.checked) {
+                        startLongTracksPolling();
+                    } else {
+                        stopLongTracksPolling();
+                    }
+                } catch (e) { console.warn('Long tracks toggle failed', e); }
+            });
+        }
+
+        // Persist-on-click toggle
+        const persistCheckbox = document.getElementById('persist-on-click');
+        if (persistCheckbox) {
+            persistCheckbox.addEventListener('change', () => {
+                saveSettings();
+            });
+        }
+
         function showError(message) {
             const errorDiv = document.getElementById('error');
             errorDiv.textContent = message;
@@ -428,10 +584,1154 @@
             document.getElementById('loading').classList.toggle('active', show);
         }
 
+        // Live positions support
+        let liveLayer = L.layerGroup();
+        let liveIntervalId = null;
+        // Map of current live markers for smooth updates (hex -> L.marker)
+        const liveMarkers = new Map();
+        // Map of last seen squawk per hex (hex -> '1234' or null)
+        const lastSquawk = new Map();
+        // Map of short trail polylines showing recent positions (hex -> L.Polyline)
+        const liveTrails = new Map();
+        // Keep the last N valid positions per hex so we can draw a small tail (hex -> Array<[lat,lon]>)
+        const lastPositions = new Map();
+        const LAST_POSITIONS_COUNT = 3;
+        // Hover debounce timers to reduce rapid fetch/redraw
+        let hoverFetchTimer = null;
+        let hoverClearTimer = null;
+        const HOVER_DEBOUNCE_MS = 150; // delay before fetching track on hover
+        const HOVER_CLEAR_MS = 200; // delay before clearing hover track on mouseout
+        // Map of flight poller intervals (hex -> intervalId) used to poll /api/flight every second
+        const flightPollers = new Map();
+        // Batch flight cache (icao -> { ts, data }) to avoid excessive UI updates
+        const BATCH_FLIGHT_TTL = 5000; // 5s
+        const flightsCache = new Map();
+        // Squawk cache (hex -> { ts, squawk })
+        const BATCH_SQUAWK_TTL = 5000; // 5s
+        const squawkCache = new Map();
+        // Batch polling controls
+        let batchPollIntervalId = null;
+        const BATCH_POLL_INTERVAL_MS = 5000; // default 5s between batch polls
+        const BATCH_MAX_PER_REQUEST = 50; // max items per batch request
+        let batchPollInFlight = false;
+        // Cache aircraft info fetched from server (/api/aircraft/:icao24)
+        const aircraftInfoCache = new Map(); // hex -> { ts, data }
+        const AIRCRAFT_CACHE_TTL = 60 * 1000; // 60s
+
+        async function fetchAircraftInfo(hex) {
+            if (!hex) return null;
+            const key = hex.toLowerCase();
+            const cached = aircraftInfoCache.get(key);
+            if (cached && (Date.now() - cached.ts) < AIRCRAFT_CACHE_TTL) return cached.data;
+            try {
+                const res = await fetch(`/api/aircraft/${encodeURIComponent(key)}`);
+                if (!res.ok) return null;
+                const data = await res.json();
+                aircraftInfoCache.set(key, { ts: Date.now(), data });
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+        // Layer used to draw a hovered aircraft track (temporary)
+        let trackLayer = L.layerGroup();
+        let hoverTrackHex = null;
+
+        // Long tracks layer (drawn from /api/track for visible hexes when enabled)
+        let longTracksLayer = L.layerGroup();
+        let longTracksIntervalId = null;
+        const LONG_TRACKS_POLL_MS = 15000; // fetch long tracks every 15s when enabled
+        const LONG_TRACKS_BATCH_SIZE = 8; // chunk size for parallel requests
+
+        // Persistent tracks shown when user clicks with "Persist track on click" enabled
+        const persistentTracksLayer = L.layerGroup();
+        persistentTracksLayer.addTo(map);
+        const persistentTracks = new Map(); // hex -> LayerGroup
+        // Initialize persisted indicator (safe now that persistentTracks exists)
+        if (typeof updatePersistedIndicator === 'function') updatePersistedIndicator();
+
+        // Client-side short TTL cache for per-hex track fetches to avoid repeated calls
+        const TRACK_CACHE_TTL_MS = 8000; // 8 seconds
+        const trackCache = new Map(); // key -> { ts, data }
+        const trackFetchPromises = new Map(); // key -> Promise
+
+        // Start polling the lightweight flights endpoint for a single aircraft (1 Hz)
+        function startFlightPolling(hex, positionObj) {
+            if (!hex) return;
+            const key = hex.toLowerCase();
+            if (flightPollers.has(key)) return; // already polling
+
+            async function pollOnce() {
+                try {
+                    const res = await fetch(`/api/flight?icao=${encodeURIComponent(key)}`);
+                    if (!res.ok) return;
+                    const payload = await res.json();
+                    const fl = payload && payload.flight;
+                    if (!fl) return;
+                    // Merge dynamic flight fields into the live position object used for tooltip/popups
+                    try {
+                        Object.assign(positionObj, fl);
+                        // Ensure squawk/transponder fields are normalized and stored under both names
+                        try {
+                            const v = fl.sqk || fl.squawk || fl.transponder || fl.transponder_code || fl.squawk_code || null;
+                            if (v) {
+                                positionObj.sqk = v;
+                                positionObj.squawk = positionObj.squawk || v;
+                                lastSquawk.set(key, v);
+                            }
+                        } catch (e) {}
+                    } catch (e) {}
+                    // Update marker tooltip/popup if marker exists
+                    const marker = liveMarkers.get(key);
+                    if (marker) {
+                        const html = buildHoverTooltipHTML(positionObj);
+                        try { const tt = marker.getTooltip && marker.getTooltip(); if (tt && tt.setContent) tt.setContent(html); }
+                        catch (e) {}
+                        try { const pp = marker.getPopup && marker.getPopup(); if (pp && pp.setContent) pp.setContent(html); } catch (e) {}
+                    }
+                } catch (err) {
+                    // silent
+                }
+            }
+
+            // Initial immediate poll, then every 1s
+            pollOnce();
+            const id = setInterval(pollOnce, 1000);
+            flightPollers.set(key, id);
+        }
+
+        function stopFlightPolling(hex) {
+            if (!hex) return;
+            const key = hex.toLowerCase();
+            const id = flightPollers.get(key);
+            if (id) {
+                clearInterval(id);
+                flightPollers.delete(key);
+            }
+        }
+
+        // POST /api/flights/batch helper
+        async function fetchFlightsBatch(icaoList) {
+            if (!Array.isArray(icaoList) || icaoList.length === 0) return {};
+            try {
+                const res = await fetch('/api/flights/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ icao24: icaoList })
+                });
+                if (!res.ok) throw new Error(`Batch flights ${res.status}`);
+                const payload = await res.json();
+                return payload.results || {};
+            } catch (err) {
+                console.warn('Batch flights fetch failed', err);
+                return {};
+            }
+        }
+
+        // Fetch squawk for a list of hexes (uses GET /api/squawk?hex=...) and returns map { hex: squawk }
+        async function fetchSquawksFor(hexList) {
+            const result = {};
+            if (!Array.isArray(hexList) || hexList.length === 0) return result;
+            // Check cache first
+            const toFetch = [];
+            hexList.forEach(h => {
+                const lk = (h || '').toString().toLowerCase();
+                const cached = squawkCache.get(lk);
+                if (cached && (Date.now() - cached.ts) < BATCH_SQUAWK_TTL) {
+                    result[lk] = cached.squawk;
+                } else {
+                    toFetch.push(lk);
+                }
+            });
+            // Fetch missing squawks in parallel (small numbers)
+            const promises = toFetch.map(async (lk) => {
+                try {
+                    const res = await fetch(`/api/squawk?hex=${encodeURIComponent(lk)}`);
+                    if (!res.ok) return null;
+                    const payload = await res.json();
+                    const sq = payload && (payload.squawk || payload.sqk || null);
+                    squawkCache.set(lk, { ts: Date.now(), squawk: sq });
+                    result[lk] = sq;
+                } catch (e) {
+                    // don't fail entire batch
+                    squawkCache.set(lk, { ts: Date.now(), squawk: null });
+                    result[lk] = null;
+                }
+            });
+            await Promise.all(promises);
+            return result;
+        }
+
+        
+
+        // Start/stop periodic batch polling of visible aircraft (merges results into tooltips)
+        function startBatchPollingVisibleFlights() {
+            if (batchPollIntervalId) return;
+            // initial run then interval
+            runBatchPollOnce();
+            batchPollIntervalId = setInterval(runBatchPollOnce, BATCH_POLL_INTERVAL_MS);
+        }
+
+        // Start/stop long tracks fetch
+        function startLongTracksPolling() {
+            if (longTracksIntervalId) return;
+            // initial run
+            fetchAndDrawLongTracks();
+            longTracksIntervalId = setInterval(fetchAndDrawLongTracks, LONG_TRACKS_POLL_MS);
+            if (!map.hasLayer(longTracksLayer)) longTracksLayer.addTo(map);
+        }
+
+        function stopLongTracksPolling() {
+            if (longTracksIntervalId) {
+                clearInterval(longTracksIntervalId);
+                longTracksIntervalId = null;
+            }
+            try { longTracksLayer.clearLayers(); if (map.hasLayer(longTracksLayer)) map.removeLayer(longTracksLayer); } catch (e) {}
+        }
+
+        async function fetchAndDrawLongTracks() {
+            try {
+                // gather visible hexes from liveMarkers
+                const bounds = map.getBounds();
+                const visible = [];
+                liveMarkers.forEach((marker, hex) => {
+                    try {
+                        const latlng = marker.getLatLng();
+                        if (latlng && bounds.contains(latlng)) {
+                            const lk = (hex || '').toString().toLowerCase();
+                            visible.push(lk);
+                        }
+                    } catch (e) {}
+                });
+                if (visible.length === 0) {
+                    // nothing to draw
+                    stopLongTracksPolling();
+                    return;
+                }
+
+                // clear current long tracks before redrawing
+                longTracksLayer.clearLayers();
+
+                // Use the UI-selected minutes window
+                const minutesElem = document.getElementById('track-window-input');
+                const minutes = minutesElem ? parseInt(minutesElem.value, 10) || 1 : 1;
+
+                // chunk visible into batches to avoid too many parallel requests
+                for (let i = 0; i < visible.length; i += LONG_TRACKS_BATCH_SIZE) {
+                    const chunk = visible.slice(i, i + LONG_TRACKS_BATCH_SIZE);
+                    // fetch tracks in parallel using existing fetchTrackWithCache
+                    const promises = chunk.map(hx => fetchTrackWithCache(hx, minutes).catch(() => ({ points: [] })));
+                    const results = await Promise.all(promises);
+                    results.forEach((res, idx) => {
+                        try {
+                            const pts = (res && res.points) || [];
+                            if (pts.length >= 2) {
+                                const poly = L.polyline(pts, { color: '#00ff99', weight: 2, opacity: 0.65, pane: 'livePane' });
+                                longTracksLayer.addLayer(poly);
+                            }
+                        } catch (e) {}
+                    });
+                }
+                // ensure the layer is on the map
+                if (!map.hasLayer(longTracksLayer)) longTracksLayer.addTo(map);
+            } catch (err) {
+                console.warn('Long tracks fetch/draw error', err);
+            }
+        }
+
+        function stopBatchPollingVisibleFlights() {
+            if (batchPollIntervalId) {
+                clearInterval(batchPollIntervalId);
+                batchPollIntervalId = null;
+            }
+        }
+
+        async function runBatchPollOnce() {
+            if (batchPollInFlight) return; // avoid overlapping
+            try {
+                // Gather visible hex keys from liveMarkers that are inside map bounds
+                const bounds = map.getBounds();
+                const visible = [];
+                liveMarkers.forEach((marker, hex) => {
+                    try {
+                        const latlng = marker.getLatLng();
+                        if (latlng && bounds.contains(latlng)) {
+                            const lk = (hex || '').toString().toLowerCase();
+                            if (!flightsCache.has(lk) || (Date.now() - flightsCache.get(lk).ts) > BATCH_FLIGHT_TTL) {
+                                visible.push(lk);
+                            }
+                        }
+                    } catch (e) {}
+                });
+                // Include persisted tracks hexes as well so persisted tracks get enriched
+                try {
+                    persistentTracks.forEach((lg, hx) => {
+                        try {
+                            const lk = (hx || '').toString().toLowerCase();
+                            if (!visible.includes(lk) && (!flightsCache.has(lk) || (Date.now() - flightsCache.get(lk).ts) > BATCH_FLIGHT_TTL)) {
+                                visible.push(lk);
+                            }
+                        } catch (e) {}
+                    });
+                } catch (e) {}
+                if (visible.length === 0) return;
+                batchPollInFlight = true;
+                // chunk into batches
+                for (let i = 0; i < visible.length; i += BATCH_MAX_PER_REQUEST) {
+                    const chunk = visible.slice(i, i + BATCH_MAX_PER_REQUEST);
+                    const resMap = await fetchFlightsBatch(chunk);
+                    // Also fetch authoritative squawk values for these hexes and merge them
+                    let squawkMap = {};
+                    try {
+                        squawkMap = await fetchSquawksFor(chunk);
+                    } catch (e) {
+                        console.warn('Batch: failed to fetch squawks for chunk', e);
+                        squawkMap = {};
+                    }
+                    // merge into cache and update markers
+                        Object.keys(resMap).forEach(k => {
+                            try {
+                                let data = resMap[k];
+                                const lk = (k || '').toString().toLowerCase();
+                                // If we have a squawk for this hex from the squawkMap, ensure it's present on the flight data
+                                try {
+                                    const sqFromMap = (squawkMap && squawkMap[lk]) ? squawkMap[lk] : null;
+                                    if (sqFromMap) {
+                                        if (!data) data = {};
+                                        data.sqk = data.sqk || sqFromMap;
+                                        data.squawk = data.squawk || sqFromMap;
+                                        lastSquawk.set(lk, sqFromMap);
+                                    }
+                                } catch (e) {}
+                                flightsCache.set(lk, { ts: Date.now(), data });
+                                const marker = liveMarkers.get(lk);
+                                if (data) {
+                                    // If we have a marker and it has the stored position object, merge full flight object
+                                    if (marker) {
+                                        try {
+                                            const pos = marker._posData || { hex: lk };
+                                            // Merge returned flight fields into the live position object
+                                            Object.assign(pos, data);
+                                            // Ensure squawk is propagated from lastSquawk if missing
+                                            try {
+                                                if (!pos.sqk && !pos.squawk && lastSquawk.has(lk)) {
+                                                    const v = lastSquawk.get(lk);
+                                                    pos.sqk = v;
+                                                    pos.squawk = pos.squawk || v;
+                                                }
+                                            } catch (e) {}
+                                            marker._posData = pos;
+                                            const html = buildHoverTooltipHTML(pos);
+                                            // Always prefer updating existing tooltip/popup content, else bind fallback
+                                            try {
+                                                const tt = marker.getTooltip && marker.getTooltip();
+                                                if (tt && tt.setContent) {
+                                                    tt.setContent(html);
+                                                    console.debug('Batch: set tooltip content for', lk);
+                                                } else {
+                                                    try {
+                                                        marker.bindTooltip(html, { direction: 'top', offset: [0, -10], sticky: true });
+                                                        console.debug('Batch: bound tooltip for', lk);
+                                                    } catch (e) { console.warn('Batch: failed to bind tooltip', lk, e); }
+                                                }
+                                            } catch (e) { console.warn('Batch: tooltip update error', lk, e); }
+
+                                            try {
+                                                const pp = marker.getPopup && marker.getPopup();
+                                                if (pp && pp.setContent) {
+                                                    pp.setContent(html);
+                                                    console.debug('Batch: set popup content for', lk);
+                                                } else {
+                                                    // bind popup as a fallback so detail is available on click
+                                                    try { marker.bindPopup(html); } catch (e) { /* ignore */ }
+                                                }
+                                            } catch (e) { console.warn('Batch: popup update error', lk, e); }
+                                        } catch (e) { console.warn('Batch: marker merge error', lk, e); }
+                                    }
+                                    // Update persisted track layer popups/tooltips if present
+                                    try {
+                                                if (persistentTracks.has(lk)) {
+                                            const lg = persistentTracks.get(lk);
+                                            // Build an enriched object for tooltips: prefer live marker data, then batch data, then aircraft cache
+                                            try {
+                                                const batchData = data || (flightsCache.get(lk) && flightsCache.get(lk).data) || {};
+                                                const aircraftCached = (aircraftInfoCache.get(lk) && aircraftInfoCache.get(lk).data) || {};
+                                                const liveData = (liveMarkers.get(lk) && liveMarkers.get(lk)._posData) || {};
+                                                const enrich = Object.assign({}, batchData, aircraftCached, liveData, { hex: lk });
+                                                // If we have a last seen squawk, ensure it's present if not in enrich
+                                                try {
+                                                    if (!enrich.sqk && !enrich.squawk && lastSquawk.has(lk)) {
+                                                        const v = lastSquawk.get(lk);
+                                                        enrich.sqk = v;
+                                                        enrich.squawk = enrich.squawk || v;
+                                                    }
+                                                } catch (e) {}
+                                                try { console.debug('Batch: enrich for', lk, enrich); } catch (e) {}
+                                                var html = buildHoverTooltipHTML(enrich);
+                                            } catch (e) {
+                                                console.warn('Batch: failed to build enriched tooltip for', lk, e);
+                                                var html = buildHoverTooltipHTML(Object.assign({ hex: lk }, data || {}));
+                                            }
+                                                lg.eachLayer(layer => {
+                                                try {
+                                                    // If a tooltip already exists, update its content; otherwise bind a new tooltip
+                                                    const tt = layer.getTooltip && layer.getTooltip();
+                                                    if (tt && tt.setContent) {
+                                                        try { tt.setContent(html); } catch (e) {}
+                                                        return;
+                                                    }
+                                                    // If a popup exists on the layer (polylines), update it instead
+                                                    const pp = layer.getPopup && layer.getPopup();
+                                                    if (pp && pp.setContent) {
+                                                        try { pp.setContent(html); } catch (e) {}
+                                                        return;
+                                                    }
+                                                    // Fallback: bind appropriate tooltip/popup
+                                                        if (layer instanceof L.CircleMarker || (layer.options && layer.options.radius)) {
+                                                        try { layer.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true }); try { console.debug('Batch: bound tooltip on start/end for', lk); } catch (e) {} } catch (e) {}
+                                                    } else if (layer instanceof L.Polyline) {
+                                                        try { layer.bindTooltip(html, { direction: 'center', sticky: true, offset: [0, 0] }); try { console.debug('Batch: bound tooltip on polyline for', lk); } catch (e) {} } catch (e) {}
+                                                    }
+                                                } catch (e) {}
+                                            });
+                                        }
+                                    } catch (e) {}
+                                    // If no marker present (e.g., persisted-only), we still cached the data so when/if a marker appears it will be used
+                                }
+                            } catch (e) {}
+                        });
+                        // For any chunk hexes that did not return a flight result, still apply squawk if available
+                        try {
+                            for (const hx of chunk) {
+                                const lk = (hx || '').toString().toLowerCase();
+                                if (resMap && Object.prototype.hasOwnProperty.call(resMap, lk)) continue; // already handled
+                                const sq = squawkMap && squawkMap[lk] ? squawkMap[lk] : null;
+                                if (sq) {
+                                    // update lastSquawk and, if a marker exists, merge and update tooltip
+                                    try { lastSquawk.set(lk, sq); } catch (e) {}
+                                }
+                                try {
+                                    const marker = liveMarkers.get(lk);
+                                    if (marker) {
+                                        const pos = marker._posData || { hex: lk };
+                                        pos.sqk = pos.sqk || sq;
+                                        pos.squawk = pos.squawk || sq;
+                                        marker._posData = pos;
+                                        const html = buildHoverTooltipHTML(pos);
+                                        try { const tt = marker.getTooltip && marker.getTooltip(); if (tt && tt.setContent) tt.setContent(html); } catch (e) {}
+                                        try { const pp = marker.getPopup && marker.getPopup(); if (pp && pp.setContent) pp.setContent(html); } catch (e) {}
+                                    }
+                                    // Update persisted tracks tooltips if present
+                                    if (persistentTracks.has(lk)) {
+                                        const lg = persistentTracks.get(lk);
+                                        const batchData = flightsCache.get(lk) && flightsCache.get(lk).data ? flightsCache.get(lk).data : {};
+                                        const aircraftCached = (aircraftInfoCache.get(lk) && aircraftInfoCache.get(lk).data) || {};
+                                        const liveData = (liveMarkers.get(lk) && liveMarkers.get(lk)._posData) || {};
+                                        const enrich = Object.assign({}, batchData, aircraftCached, liveData, { hex: lk });
+                                        if (!enrich.sqk && !enrich.squawk) { enrich.sqk = sq; enrich.squawk = sq; }
+                                        const html = buildHoverTooltipHTML(enrich);
+                                        lg.eachLayer(layer => {
+                                            try {
+                                                const tt = layer.getTooltip && layer.getTooltip();
+                                                if (tt && tt.setContent) { tt.setContent(html); return; }
+                                                const pp = layer.getPopup && layer.getPopup();
+                                                if (pp && pp.setContent) { pp.setContent(html); return; }
+                                                if (layer instanceof L.CircleMarker || (layer.options && layer.options.radius)) {
+                                                    layer.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true });
+                                                } else if (layer instanceof L.Polyline) {
+                                                    layer.bindTooltip(html, { direction: 'center', sticky: true, offset: [0, 0] });
+                                                }
+                                            } catch (e) {}
+                                        });
+                                    }
+                                } catch (e) {}
+                            }
+                        } catch (e) { console.warn('Batch: error merging squawks for missing flight entries', e); }
+                }
+            } catch (err) {
+                console.warn('Batch poll error', err);
+            } finally {
+                batchPollInFlight = false;
+            }
+        }
+
+        function cacheKey(hex, minutes) { return `${hex}|${minutes}`; }
+
+        function getCachedTrack(hex, minutes) {
+            const key = cacheKey(hex, minutes);
+            const entry = trackCache.get(key);
+            if (!entry) return null;
+            if ((Date.now() - entry.ts) > TRACK_CACHE_TTL_MS) {
+                trackCache.delete(key);
+                return null;
+            }
+            return entry.data;
+        }
+
+        // Build rich tooltip HTML for a live position object
+        function buildHoverTooltipHTML(p) {
+            // Use multiple fallback field names commonly used by different sources
+            const callsign = p.flight || p.callsign || p.call || p.callsign_icao || p.flight_ident || '';
+            // Accept many transponder/squawk field variants and fallback to lastSquawk map if available
+            const hexKey = (p.hex || '').toString().toLowerCase();
+            const squawk = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || p.squawk_code || (lastSquawk.has(hexKey) ? lastSquawk.get(hexKey) : '') || '';
+            const reg = p.registration || p.Registration || p.reg || p.Reg || p.tail || '';
+            const airline = p.airline || p.operator || p.operator_name || p.airline_name || p.airlineName || '';
+            // Altitude: accept alt, altitude, A lt variants, or max_alt_ft from batch
+            const rawAlt = (p.alt ?? p.altitude ?? p.Alt ?? p.Altitude ?? p.max_alt_ft ?? p.max_alt ?? p.alt_ft ?? '');
+            const alt = (rawAlt !== '' && rawAlt != null) ? (Number(rawAlt) ? `${Number(rawAlt).toLocaleString()} ft` : rawAlt) : '';
+            // Speed: accept gs, speed, groundSpeed, or max_speed_kt
+            const rawSpeed = (p.gs ?? p.speed ?? p.groundSpeed ?? p.GS ?? p.max_speed_kt ?? p.speed_kt ?? '');
+            const speed = (rawSpeed !== '' && rawSpeed != null) ? (Number(rawSpeed) ? `${Number(rawSpeed).toLocaleString()} kt` : rawSpeed) : '';
+            // Track/heading fallbacks
+            const trackVal = (typeof p.track === 'number' ? p.track : (typeof p.heading === 'number' ? p.heading : (typeof p.course === 'number' ? p.course : (typeof p.true_track === 'number' ? p.true_track : ''))));
+            const track = (trackVal !== '' && trackVal != null) ? trackVal : '';
+            const lat = (p.lat || p.latitude || p.Lat) || '';
+            const lon = (p.lon || p.longitude || p.Lon) || '';
+            const timeStr = p.timestamp ? (isNaN(Number(p.timestamp)) ? new Date(p.timestamp).toISOString() : new Date(Number(p.timestamp)).toISOString()) : '';
+            return `
+                <div style="min-width:200px">
+                    <strong>${(p.hex||'').toUpperCase()}${callsign ? ' — ' + callsign : ''}</strong>
+                    <div>Registration: <em>${reg || '—'}</em></div>
+                    <div>Airline: <em>${airline || '—'}</em></div>
+                    <div>Squawk: <em>${squawk || '—'}</em></div>
+                    <div>Alt: <em>${alt || '—'}</em></div>
+                    <div>Speed: <em>${speed || '—'}</em></div>
+                    <div>Track: <em>${track !== '' ? track + '°' : '—'}</em></div>
+                    <div>Pos: <em>${lat ? (typeof lat === 'number' ? lat.toFixed(5) : lat) : '—'}, ${lon ? (typeof lon === 'number' ? lon.toFixed(5) : lon) : '—'}</em></div>
+                    <div>Seen: <em>${timeStr || '—'}</em></div>
+                </div>`;
+        }
+
+        async function fetchTrackWithCache(hex, minutes) {
+            const key = cacheKey(hex, minutes);
+            const cached = getCachedTrack(hex, minutes);
+            if (cached) return { points: cached, cached: true };
+            if (trackFetchPromises.has(key)) return trackFetchPromises.get(key);
+
+            const promise = (async () => {
+                const res = await fetch(`/api/track?hex=${encodeURIComponent(hex)}&minutes=${minutes}`);
+                if (!res.ok) throw new Error(`Track API ${res.status}`);
+                const payload = await res.json();
+                // Normalize track points: accept several common field names and coerce to numbers.
+                const pts = (payload.track || []).map(t => {
+                    const lat = (t.lat ?? t.latitude ?? t.Latitude ?? t.Lat);
+                    const lon = (t.lon ?? t.longitude ?? t.Longitude ?? t.Lon);
+                    if (lat == null || lon == null) return null;
+                    const nlat = Number(lat);
+                    const nlon = Number(lon);
+                    if (isNaN(nlat) || isNaN(nlon)) return null;
+                    return [nlat, nlon];
+                }).filter(Boolean);
+                trackCache.set(key, { ts: Date.now(), data: pts });
+                // Schedule a cleanup after TTL to avoid unbounded growth
+                setTimeout(() => {
+                    const e = trackCache.get(key);
+                    if (e && ((Date.now() - e.ts) >= TRACK_CACHE_TTL_MS)) trackCache.delete(key);
+                }, TRACK_CACHE_TTL_MS + 500);
+                return { points: pts, cached: false };
+            })();
+
+            trackFetchPromises.set(key, promise);
+            try {
+                const r = await promise;
+                return r;
+            } finally {
+                trackFetchPromises.delete(key);
+            }
+        }
+
+        function clearAllPersistentTracks() {
+            persistentTracks.forEach((lg, hex) => {
+                persistentTracksLayer.removeLayer(lg);
+            });
+            persistentTracks.clear();
+            updatePersistedIndicator();
+        }
+
+        function updatePersistedIndicator() {
+            const el = document.getElementById('persisted-tracks-indicator');
+            const listEl = document.getElementById('persisted-tracks-list');
+            if (!el) return;
+            const keys = [...persistentTracks.keys()];
+            el.textContent = `${keys.length}`;
+            if (listEl) {
+                listEl.textContent = keys.length ? keys.join(', ') : '';
+            }
+        }
+
+        // Update debug panel with lastSquawk and lastPositions for a hex
+        function updateDebugPanel(hex) {
+            const el = document.getElementById('debug-panel');
+            if (!el) return;
+            if (!hex) {
+                el.innerHTML = 'No hex selected';
+                return;
+            }
+            const k = (hex || '').toString().toLowerCase();
+            const sq = lastSquawk.has(k) ? lastSquawk.get(k) : '—';
+            const positions = lastPositions.get(k) || [];
+            const posHtml = positions.length ? positions.map(p => `${(typeof p[0] === 'number' ? p[0].toFixed(5) : p[0])}, ${(typeof p[1] === 'number' ? p[1].toFixed(5) : p[1])}`).join('<br>') : '—';
+            let html = `<div style="line-height:1.2"><strong>${k.toUpperCase()}</strong><br><span>Squawk: <em>${sq}</em></span><br><span>Positions:<br>${posHtml}</span></div>`;
+            if (window.debugDumpEnabled) {
+                // Add full JSON dumps for marker._posData, flightsCache, aircraftInfoCache
+                try {
+                    const marker = liveMarkers.get(k);
+                    const markerData = marker && marker._posData ? marker._posData : null;
+                    const flightCacheData = flightsCache.get(k) ? flightsCache.get(k).data : null;
+                    const aircraftCacheData = aircraftInfoCache.get(k) ? aircraftInfoCache.get(k).data : null;
+                    const dump = {
+                        marker: markerData,
+                        flightsCache: flightCacheData,
+                        aircraftInfoCache: aircraftCacheData
+                    };
+                    const dumpStr = JSON.stringify(dump, null, 2);
+                    html += `<pre style="max-height:160px;overflow:auto;background:#111;padding:8px;border-radius:4px;margin-top:6px;color:#ddd;font-size:11px">${escapeHtml(dumpStr)}</pre>`;
+                } catch (e) {
+                    html += `<div style="color:#f66">Failed to render dump: ${e.message}</div>`;
+                }
+            }
+            el.innerHTML = html;
+        }
+
+        // toggle for showing full debug dumps
+        window.debugDumpEnabled = false;
+        function toggleDebugDump() {
+            window.debugDumpEnabled = !window.debugDumpEnabled;
+            const btn = document.getElementById('toggle-debug-dump');
+            if (btn) btn.textContent = window.debugDumpEnabled ? 'Hide Debug Dump' : 'Show Debug Dump';
+            // refresh current panel
+            try { updateDebugPanel(hoverTrackHex || [...persistentTracks.keys()][0] || null); } catch (e) {}
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Create an aircraft SVG icon (color can be changed)
+        function createAircraftIcon(color = '#ff3300', size = 20, rotation = 0) {
+            const svg = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
+                    <path d="M21 11.5c0-.28-.22-.5-.5-.5h-6.79L12 4.21 10.29 5.92 11.5 7.12 8.75 9.88 7.34 9.5c-.14-.03-.28-.02-.41.04L4 10.5c-.44.14-.75.55-.75 1v1c0 .45.31.86.75 1l2.93.84c.13.04.27.06.41.04l1.41-.38L11.5 16.9 10.29 18.1 12 19.79l1.71-1.71H21.5c.28 0 .5-.22.5-.5v-5.08z" fill="${color}" />
+                </svg>`;
+            const html = `<div style="transform: rotate(${rotation}deg); width: ${size}px; height:${size}px; display:flex; align-items:center; justify-content:center">${svg}</div>`;
+            return L.divIcon({ html, className: 'aircraft-icon', iconSize: [size, size], iconAnchor: [size/2, size/2] });
+        }
+
+        // Add minimal CSS for aircraft icons
+        const style = document.createElement('style');
+        style.innerHTML = `.aircraft-icon svg { display:block; } .aircraft-icon { pointer-events: auto; }`;
+        document.head.appendChild(style);
+        function clearLiveLayer() {
+            if (liveLayer) {
+                // remove layer from map and clear stored markers
+                liveLayer.clearLayers();
+                if (map.hasLayer(liveLayer)) map.removeLayer(liveLayer);
+            }
+            // remove and forget markers
+            liveMarkers.forEach((m) => {
+                try { if (map.hasLayer(m)) map.removeLayer(m); } catch (e) {}
+            });
+            liveMarkers.clear();
+        }
+
+        async function fetchLivePositions() {
+            try {
+                setLiveStatus('Fetching...', 'loading');
+                const timeWindow = document.getElementById('time-window').value;
+                // reuse windowToHours helper
+                function windowToHours(w) {
+                    if (!w) return 24;
+                    if (w === 'all') return 744;
+                    if (w.endsWith('d')) {
+                        const days = parseInt(w.replace('d',''), 10);
+                        return isNaN(days) ? 24 : days * 24;
+                    }
+                    if (w.endsWith('h')) {
+                        const hrs = parseInt(w.replace('h',''), 10);
+                        return isNaN(hrs) ? 24 : hrs;
+                    }
+                    return 24;
+                }
+                const hours = windowToHours(timeWindow);
+                // Fetch live positions (no hours parameter) — server returns recent active aircraft
+                const res = await fetch(`/api/positions-live`);
+                if (!res.ok) throw new Error(`Positions API error: ${res.status}`);
+                const payload = await res.json();
+                const positions = payload.positions || [];
+
+                // Prefetch aircraft info for all visible hexes using batch endpoint to reduce requests
+                try {
+                    const needed = [];
+                    const seenSet = new Set();
+                    positions.forEach(p => {
+                        const hx = (p.hex || '').toLowerCase();
+                        if (!hx) return;
+                        if (seenSet.has(hx)) return;
+                        seenSet.add(hx);
+                        const cached = aircraftInfoCache.get(hx);
+                        if (!cached || !cached.data) {
+                            needed.push(hx);
+                        }
+                    });
+                    if (needed.length > 0) {
+                        // POST { icao24: [...] } expected by server
+                        const batchRes = await fetch('/api/aircraft/batch', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ icao24: needed })
+                        });
+                        if (batchRes.ok) {
+                            const batchPayload = await batchRes.json();
+                            const results = batchPayload.results || {};
+                            Object.keys(results).forEach(k => {
+                                const lk = k.toLowerCase();
+                                aircraftInfoCache.set(lk, { ts: Date.now(), data: results[k] });
+                            });
+                            // mark not-found entries to avoid repeated requests
+                            needed.forEach(h => {
+                                const lk = h.toLowerCase();
+                                if (!aircraftInfoCache.has(lk)) aircraftInfoCache.set(lk, { ts: Date.now(), data: null });
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Batch aircraft lookup failed', err);
+                }
+
+                // Update live layer contents: update existing markers in-place for smooth movement
+                const seenHexes = new Set();
+                positions.forEach(p => {
+                    const lat = p.lat ?? p.Latitude ?? p.latitude;
+                    const lon = p.lon ?? p.Longitude ?? p.longitude;
+                    if (typeof lat !== 'number' || typeof lon !== 'number') return;
+                    const hex = (p.hex || '').toLowerCase();
+                    seenHexes.add(hex);
+                    // Merge cached aircraft info into position object for tooltip/popups
+                    try {
+                        const cachedInfo = aircraftInfoCache.get(hex);
+                        if (cachedInfo && cachedInfo.data) {
+                            const info = cachedInfo.data;
+                            p.registration = p.registration || info.registration || info.reg || info.tail || p.registration;
+                            p.airline = p.airline || info.operator || info.airline || info.operator_name || p.airline;
+                        }
+                    } catch (e) {}
+
+                    // Record any squawk we saw for this hex so it can be used by persisted tracks
+                    try {
+                        const s = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || null;
+                        if (s) lastSquawk.set(hex, s);
+                    } catch (e) {}
+
+                    // Calculate rotation if heading/track is available
+                    const rot = (typeof p.track === 'number' && !isNaN(p.track)) ? p.track : (typeof p.heading === 'number' ? p.heading : 0);
+
+                    // If there's an existing marker, move it smoothly by setting its position and updating icon
+                    if (liveMarkers.has(hex)) {
+                        const existing = liveMarkers.get(hex);
+                        try {
+                            // Merge live position with any existing enriched data so we don't lose batch-enriched fields
+                            try {
+                                const merged = Object.assign({}, existing._posData || {}, p);
+                                try {
+                                    if (!merged.sqk && !merged.squawk && lastSquawk.has(hex)) {
+                                        const v = lastSquawk.get(hex);
+                                        merged.sqk = v;
+                                        merged.squawk = merged.squawk || v;
+                                    }
+                                } catch (e) {}
+                                existing._posData = merged;
+                                try { console.debug('Live: merged marker._posData for', hex, merged); } catch (e) {}
+                            } catch (e) {
+                                existing._posData = p;
+                                try { console.debug('Live: set marker._posData (no merge) for', hex, p); } catch (e) {}
+                            }
+                            const oldLatLng = existing.getLatLng ? existing.getLatLng() : null;
+                            existing.setLatLng([lat, lon]);
+                            // update icon rotation by modifying the existing DOM element rather than recreating the icon
+                            const el = (existing.getElement && existing.getElement()) || existing._icon;
+                            if (el) {
+                                // our createAircraftIcon wraps the svg in a div, update its transform
+                                const inner = el.querySelector && el.querySelector('div');
+                                if (inner) inner.style.transform = `rotate(${rot || 0}deg)`;
+                            }
+
+                            // update tooltip content from merged marker._posData (preserve batch-enriched fields)
+                            const tooltipHtml = buildHoverTooltipHTML(existing._posData || p);
+                            try {
+                                const tt = existing.getTooltip && existing.getTooltip();
+                                if (tt && tt.setContent) {
+                                    tt.setContent(tooltipHtml);
+                                    try { console.debug('Live: updated tooltip for', hex); } catch (e) {}
+                                } else {
+                                    existing.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+                                    try { console.debug('Live: bound tooltip for', hex); } catch (e) {}
+                                }
+                            } catch (e) {
+                                // ignore tooltip update errors
+                            }
+
+                            // update popup content as well
+                            try {
+                                const popup = existing.getPopup && existing.getPopup();
+                                if (popup && popup.setContent) {
+                                    popup.setContent(tooltipHtml);
+                                    try { console.debug('Live: updated popup for', hex); } catch (e) {}
+                                }
+                            } catch (e) {}
+
+                            // Maintain last N valid positions for this hex and draw a short tail
+                            try {
+                                const arr = lastPositions.get(hex) || [];
+                                const last = arr.length ? arr[arr.length - 1] : null;
+                                // push only if position changed
+                                if (!last || last[0] !== lat || last[1] !== lon) {
+                                    arr.push([lat, lon]);
+                                    if (arr.length > LAST_POSITIONS_COUNT) arr.splice(0, arr.length - LAST_POSITIONS_COUNT);
+                                    lastPositions.set(hex, arr);
+                                }
+
+                                const pts = (lastPositions.get(hex) || []).slice();
+                                if (pts.length >= 2) {
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { tr.setLatLngs(pts); } catch (e) {}
+                                    } else {
+                                        const tr = L.polyline(pts, { color: '#00ffff', weight: 2, opacity: 0.7, pane: 'livePane', interactive: false });
+                                        liveTrails.set(hex, tr);
+                                        liveLayer.addLayer(tr);
+                                    }
+                                } else {
+                                    // remove any existing short trail if we don't have at least two points
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
+                                        liveTrails.delete(hex);
+                                    }
+                                }
+
+                                // Compute bearing using the last two valid positions if track not provided
+                                try {
+                                    const mp = existing._posData || {};
+                                    if ((!mp.track && typeof mp.track !== 'number') || mp.track === '') {
+                                        const curPts = lastPositions.get(hex) || [];
+                                        if (curPts.length >= 2) {
+                                            const a = curPts[curPts.length - 2];
+                                            const b = curPts[curPts.length - 1];
+                                            const bng = computeBearing(a[0], a[1], b[0], b[1]);
+                                            if (bng != null) {
+                                                try { mp.track = bng; existing._posData = mp; } catch (e) {}
+                                                try { console.debug('Live: computed track for', hex, bng); } catch (e) {}
+                                            }
+                                        }
+                                    }
+                                } catch (e) {}
+                            } catch (e) {}
+                        } catch (e) {
+                            console.warn('Failed to update marker for', hex, e);
+                        }
+                        return;
+                    }
+
+                    // Otherwise create new marker and add to layer
+                    const icon = createAircraftIcon('#ff3300', 20, rot || 0);
+                    const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
+
+                    // Tooltip shown on hover (richer HTML)
+                    const tooltipHtml = buildHoverTooltipHTML(p);
+                    marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+
+                    // Ensure initial posData includes squawk fallback and seed recent positions
+                    try {
+                        const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
+                        if (v) { p.sqk = v; p.squawk = p.squawk || v; }
+                        else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
+                    } catch (e) {}
+                    try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
+
+                    // If registration/airline missing, try fetching from server aircraft DB
+                    (async () => {
+                            try {
+                                const info = await fetchAircraftInfo(hex);
+                                if (info) {
+                                    // merge fields onto p for tooltip generation
+                                    p.registration = p.registration || info.registration || info.reg || info.tail || p.registration;
+                                    p.airline = p.airline || info.operator || info.airline || info.operator_name || p.airline;
+                                }
+                            } catch (e) {}
+                            // ensure marker._posData is up-to-date and remember squawk
+                            try {
+                                marker._posData = p;
+                                const s = p.sqk || p.squawk || p.SQK || p.Squawk || null;
+                                try { if (s) lastSquawk.set(hex, s); } catch (e) {}
+                                const newHtml = buildHoverTooltipHTML(p);
+                                try { if (marker.getTooltip && marker.getTooltip().setContent) marker.getTooltip().setContent(newHtml); else marker.bindTooltip(newHtml, { direction: 'top', offset: [0, -10], sticky: true }); } catch (e) {}
+                                try { if (marker.getPopup && marker.getPopup().setContent) marker.getPopup().setContent(newHtml); } catch (e) {}
+                            } catch (e) {}
+                    })();
+
+                    // On hover, fetch (with cache/debounce) and display recent track for this aircraft
+                    marker.on('mouseover', (ev) => {
+                        try {
+                            if (!hex) return;
+                            // cancel any pending clear
+                            if (hoverClearTimer) { clearTimeout(hoverClearTimer); hoverClearTimer = null; }
+                            // debounce actual fetch/draw to avoid rapid requests when moving across markers
+                            if (hoverFetchTimer) clearTimeout(hoverFetchTimer);
+                            hoverFetchTimer = setTimeout(async () => {
+                                try {
+                                    if (!hex) return;
+                                    if (hoverTrackHex === hex) return;
+                                    hoverTrackHex = hex;
+                                    try { updateDebugPanel(hex); } catch (e) {}
+                                    // Clear any previous hover-only track
+                                    trackLayer.clearLayers();
+
+                                    // Use the UI-selected track window (minutes)
+                                    const minutesElem = document.getElementById('track-window-input');
+                                    const minutes = minutesElem ? parseInt(minutesElem.value, 10) || 1 : 1;
+                                    setTrackStatus('Fetching...', 'loading');
+
+                                    try {
+                                        const { points, cached } = await fetchTrackWithCache(hex, minutes);
+                                        if (points.length > 0) {
+                                            const poly = L.polyline(points, { color: '#00ffff', weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                            const start = L.circleMarker(points[0], { radius: 3, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
+                                            const end = L.circleMarker(points[points.length - 1], { radius: 3, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
+                                            trackLayer.addLayer(poly);
+                                            trackLayer.addLayer(start);
+                                            trackLayer.addLayer(end);
+                                            trackLayer.addTo(map);
+                                            setTrackStatus(formatOkWithTime(`OK (${points.length})${cached ? ' (cached)' : ''}`), 'ok');
+                                        } else {
+                                            setTrackStatus('No data', 'error');
+                                        }
+                                    } catch (err) {
+                                        console.warn('Failed to fetch/show track for', hex, err);
+                                        setTrackStatus('Error', 'error');
+                                    }
+                                    // Begin polling flight details (1 Hz) and update tooltip while hovering
+                                    try { startFlightPolling(hex, p); } catch (e) {}
+                                } catch (err) {
+                                    console.warn('Debounced hover error for', hex, err);
+                                }
+                            }, HOVER_DEBOUNCE_MS);
+                        } catch (err) {
+                            console.warn('Hover handler (debounce) error for', hex, err);
+                            setTrackStatus('Error', 'error');
+                        }
+                    });
+
+                    marker.on('mouseout', () => {
+                        // Cancel any pending hover fetch
+                        if (hoverFetchTimer) { clearTimeout(hoverFetchTimer); hoverFetchTimer = null; }
+                        // Delay clearing the hover track slightly to avoid flicker when moving between markers
+                        if (hoverClearTimer) clearTimeout(hoverClearTimer);
+                        hoverClearTimer = setTimeout(() => {
+                            hoverTrackHex = null;
+                            try { updateDebugPanel(null); } catch (e) {}
+                            trackLayer.clearLayers();
+                            if (map.hasLayer(trackLayer)) map.removeLayer(trackLayer);
+                            // Stop per-aircraft flight polling when hover ends
+                            try { stopFlightPolling(hex); } catch (e) {}
+                        }, HOVER_CLEAR_MS);
+                    });
+
+                    // Click to persist (if checkbox enabled) — toggle persisted track for this hex
+                    marker.on('click', async () => {
+                        try {
+                            if (!hex) return;
+                            const persistEnabled = document.getElementById('persist-on-click') ? document.getElementById('persist-on-click').checked : false;
+                            if (!persistEnabled) return; // nothing to do
+
+                            // If already persisted, remove it
+                                if (persistentTracks.has(hex)) {
+                                const lg = persistentTracks.get(hex);
+                                persistentTracksLayer.removeLayer(lg);
+                                persistentTracks.delete(hex);
+                                updatePersistedIndicator();
+                                setTrackStatus(`Removed persisted ${hex}`, 'ok');
+                                return;
+                            }
+
+                            setTrackStatus('Fetching...', 'loading');
+                            const minutesElem = document.getElementById('track-window-input');
+                            const minutes = minutesElem ? parseInt(minutesElem.value, 10) || 1 : 1;
+                            try {
+                                const { points } = await fetchTrackWithCache(hex, minutes);
+                                if (points.length > 0) {
+                                    const lg = L.layerGroup();
+                                    const poly = L.polyline(points, { color: '#ffaa00', weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
+                                    const start = L.circleMarker(points[0], { radius: 4, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.95, pane: 'persistentPane' });
+                                    const end = L.circleMarker(points[points.length - 1], { radius: 4, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.95, pane: 'persistentPane' });
+                                    lg.addLayer(poly);
+                                    lg.addLayer(start);
+                                    lg.addLayer(end);
+                                    persistentTracks.set(hex, lg);
+                                    persistentTracksLayer.addLayer(lg);
+                                    updatePersistedIndicator();
+                                    try { updateDebugPanel(hex); } catch (e) {}
+                                        setTrackStatus(formatOkWithTime(`Persisted (${points.length})`), 'ok');
+                                        // Attach popup/tooltips to persisted markers using cached flights data if available
+                                        (async () => {
+                                            try {
+                                                const k = hex.toLowerCase();
+                                                let data = flightsCache.get(k)?.data;
+                                                if (!data) {
+                                                    const res = await fetchFlightsBatch([k]);
+                                                    data = res[k] || null;
+                                                    flightsCache.set(k, { ts: Date.now(), data });
+                                                }
+                                                if (data) {
+                                                    try {
+                                                        const batchData = data || (flightsCache.get(k) && flightsCache.get(k).data) || {};
+                                                        const aircraftCached = (aircraftInfoCache.get(k) && aircraftInfoCache.get(k).data) || {};
+                                                        const liveData = (liveMarkers.get(k) && liveMarkers.get(k)._posData) || {};
+                                                        const enrich = Object.assign({}, batchData, aircraftCached, liveData, { hex: k });
+                                                        try {
+                                                            if (!enrich.sqk && !enrich.squawk && lastSquawk.has(k)) {
+                                                                const v = lastSquawk.get(k);
+                                                                enrich.sqk = v;
+                                                                enrich.squawk = enrich.squawk || v;
+                                                            }
+                                                        } catch (e) {}
+                                                            try { console.debug('Persist: enrich for', k, enrich); } catch (e) {}
+                                                            const html = buildHoverTooltipHTML(enrich);
+                                                            try { if (start.getTooltip && start.getTooltip().setContent) { start.getTooltip().setContent(html); console.debug('Persist: set tooltip on start for', k); } else { start.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true }); console.debug('Persist: bound tooltip on start for', k); } } catch (e) {}
+                                                            try { if (end.getTooltip && end.getTooltip().setContent) { end.getTooltip().setContent(html); console.debug('Persist: set tooltip on end for', k); } else { end.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true }); console.debug('Persist: bound tooltip on end for', k); } } catch (e) {}
+                                                            try { if (poly.getTooltip && poly.getTooltip().setContent) { poly.getTooltip().setContent(html); console.debug('Persist: set tooltip on poly for', k); } else { poly.bindTooltip(html, { direction: 'center', sticky: true, offset: [0, 0] }); console.debug('Persist: bound tooltip on poly for', k); } } catch (e) {}
+                                                    } catch (e) {
+                                                        try { const html = buildHoverTooltipHTML(Object.assign({ hex: k }, data || {})); start.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true }); end.bindTooltip(html, { direction: 'top', offset: [0, -8], sticky: true }); poly.bindTooltip(html, { direction: 'center', sticky: true, offset: [0, 0] }); } catch (e) {}
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                // ignore enrichment errors for persisted tracks
+                                            }
+                                        })();
+                                } else {
+                                    setTrackStatus('No data', 'error');
+                                }
+                            } catch (err) {
+                                console.warn('Failed to fetch/persist track for', hex, err);
+                                setTrackStatus('Error', 'error');
+                            }
+                        } catch (err) {
+                            console.warn('Click handler error for', hex, err);
+                        }
+                    });
+
+                    // Popup on click with more details (reuse tooltip html)
+                    const popupHtml = buildHoverTooltipHTML(p);
+                    marker.bindPopup(popupHtml);
+
+                    // attach the live position object to marker for batch merges
+                    marker._posData = p;
+
+                    liveLayer.addLayer(marker);
+                    liveMarkers.set(hex, marker);
+                });
+
+                // Remove any markers (and trails) that were not seen in this update
+                [...liveMarkers.keys()].forEach(k => {
+                    if (!seenHexes.has(k)) {
+                        const m = liveMarkers.get(k);
+                        try { liveLayer.removeLayer(m); if (map.hasLayer(m)) map.removeLayer(m); } catch (e) {}
+                        liveMarkers.delete(k);
+                        // Stop any flight polling associated with this marker
+                        try { stopFlightPolling(k); } catch (e) {}
+                        if (liveTrails.has(k)) {
+                            const tr = liveTrails.get(k);
+                            try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
+                            liveTrails.delete(k);
+                        }
+                    }
+                });
+
+                // Ensure live layer is on the map
+                if (!map.hasLayer(liveLayer)) liveLayer.addTo(map);
+                setLiveStatus(formatOkWithTime(`OK (${positions.length})`), 'ok');
+                // If long tracks toggle is enabled, ensure polling is active
+                try {
+                    const cb = document.getElementById('show-long-tracks');
+                    if (cb && cb.checked) startLongTracksPolling();
+                } catch (e) {}
+            } catch (err) {
+                console.warn('Failed to fetch live positions:', err);
+                setLiveStatus('Error', 'error');
+            }
+        }
+
+        function setLiveStatus(text, state) {
+            const el = document.getElementById('live-fetch-status');
+            if (!el) return;
+            el.textContent = text;
+            el.classList.remove('status-ok', 'status-loading', 'status-error');
+            if (state === 'ok') el.classList.add('status-ok');
+            else if (state === 'loading') el.classList.add('status-loading');
+            else if (state === 'error') el.classList.add('status-error');
+        }
+
+        function setTrackStatus(text, state) {
+            const el = document.getElementById('track-fetch-status');
+            if (!el) return;
+            el.textContent = text;
+            el.classList.remove('status-ok', 'status-loading', 'status-error');
+            if (state === 'ok') el.classList.add('status-ok');
+            else if (state === 'loading') el.classList.add('status-loading');
+            else if (state === 'error') el.classList.add('status-error');
+        }
+
+        // Helper that appends a local timestamp when state is OK
+        function formatOkWithTime(baseText) {
+            try {
+                const now = new Date();
+                return `${baseText} — ${now.toLocaleTimeString()}`;
+            } catch (e) {
+                return baseText;
+            }
+        }
+
+        function toggleLivePositions() {
+            const enabled = document.getElementById('show-live').checked;
+            if (enabled) {
+                // Fetch immediately and then every 5 seconds
+                fetchLivePositions();
+                liveIntervalId = setInterval(fetchLivePositions, 5000);
+                // Start batch polling for visible aircraft (rate-limited)
+                try { startBatchPollingVisibleFlights(); } catch (e) { console.warn('Failed to start batch polling', e); }
+            } else {
+                if (liveIntervalId) { clearInterval(liveIntervalId); liveIntervalId = null; }
+                clearLiveLayer();
+                // Clear any hovered track overlay
+                hoverTrackHex = null;
+                trackLayer.clearLayers();
+                if (map.hasLayer(trackLayer)) map.removeLayer(trackLayer);
+                // Stop batch polling when live is disabled
+                try { stopBatchPollingVisibleFlights(); } catch (e) {}
+            }
+        }
+
         // Convert lat/lon distance to degrees (approximation)
         function nmToDegrees(nm) {
             // 1 degree latitude ≈ 60 nm
             return nm / 60;
+        }
+
+        // Compute bearing from lat1,lon1 -> lat2,lon2 in degrees (0-360)
+        function computeBearing(lat1, lon1, lat2, lon2) {
+            try {
+                const toRad = v => v * Math.PI / 180;
+                const toDeg = v => v * 180 / Math.PI;
+                const φ1 = toRad(lat1);
+                const φ2 = toRad(lat2);
+                const Δλ = toRad(lon2 - lon1);
+                const y = Math.sin(Δλ) * Math.cos(φ2);
+                const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+                let θ = Math.atan2(y, x);
+                θ = toDeg(θ);
+                if (θ < 0) θ += 360;
+                return Math.round(θ);
+            } catch (e) { return null; }
         }
 
         // Get color based on intensity
@@ -474,11 +1774,31 @@
                 const timeWindow = document.getElementById('time-window').value;
                 const startTime = Date.now();
 
-                console.log(`Loading grid data with time window: ${timeWindow}`);
-                const response = await fetch(`/api/heatmap?window=${timeWindow}`);
+                // Map UI window values to the backend hours parameter used by /api/heatmap-data
+                function windowToHours(w) {
+                    if (!w) return 24;
+                    if (w === 'all') return 744; // default to ~31 days for "all"
+                    if (w.endsWith('d')) {
+                        const days = parseInt(w.replace('d',''), 10);
+                        return isNaN(days) ? 24 : days * 24;
+                    }
+                    if (w.endsWith('h')) {
+                        const hrs = parseInt(w.replace('h',''), 10);
+                        return isNaN(hrs) ? 24 : hrs;
+                    }
+                    return 24;
+                }
+
+                const hours = windowToHours(timeWindow);
+                const url = `/api/heatmap-data?hours=${hours}`;
+                console.log(`Loading grid data with time window: ${timeWindow} -> ${hours} hours; fetching ${url}`);
+
+                const response = await fetch(url);
                 if (!response.ok) throw new Error(`API error: ${response.status}`);
 
-                const gridData = await response.json();
+                // Accept either an array response or an object { grid: [...] }
+                const payload = await response.json();
+                const gridData = Array.isArray(payload) ? payload : (payload.grid || []);
                 const loadTime = Date.now() - startTime;
                 console.log(`Received ${gridData.length} grid cells from API`);
 
@@ -539,7 +1859,7 @@
             const colorMode = document.getElementById('color-mode').value;
             const showBorders = document.getElementById('show-borders').checked;
 
-            // Create feature group for all grid cells
+            // Create feature group for all grid cells (placed into the dedicated heatmap pane)
             gridLayer = L.featureGroup([]);
 
             currentData.gridCells.forEach(cell => {
@@ -554,6 +1874,7 @@
                 const color = getColorForIntensity(cell.count, currentData.maxCount, colorMode);
 
                 const rectangle = L.rectangle(bounds, {
+                    pane: 'heatmapPane',
                     color: showBorders ? '#333' : color,
                     weight: showBorders ? 1 : 0,
                     fillColor: color,
@@ -573,6 +1894,31 @@
             });
 
             gridLayer.addTo(map);
+
+            // Register heatmap overlay in the layers control so users can toggle it
+            try { layersControl.addOverlay(gridLayer, 'Heatmap Grid'); } catch (e) {}
+
+            // Ensure live positions and persisted tracks overlays are available in the control
+            try { layersControl.addOverlay(liveLayer, 'Positions (Live)'); } catch (e) {}
+            try { layersControl.addOverlay(persistentTracksLayer, 'Persisted Tracks'); } catch (e) {}
+
+            // If the user has 'Show Live' checked, ensure live polling is started so tooltips populate
+            try {
+                const showLiveElem = document.getElementById('show-live');
+                if (showLiveElem && showLiveElem.checked && !liveIntervalId) {
+                    // Start live positions and batch polling
+                    toggleLivePositions();
+                }
+            } catch (e) {
+                console.warn('Auto-start live after grid load failed', e);
+            }
+            // Always do a one-time fetch of live positions so the positions overlay
+            // is populated with the same data as the Live tab (tooltips/enrichment)
+            try {
+                fetchLivePositions();
+            } catch (e) {
+                console.warn('One-time fetch of live positions failed', e);
+            }
 
             // Fit bounds to data
             if (currentData.bounds.minLat !== Infinity) {
