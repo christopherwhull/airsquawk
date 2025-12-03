@@ -12,7 +12,7 @@
     <style>
         :root {
             --bg: #0f0f10;
-            --panel-bg: #1e1e1e;
+            --panel-bg: #121213;
             --card-bg: #1b1b1b;
             --text: #e0e0e0;
             --muted: #bbb;
@@ -20,18 +20,34 @@
             --highlight: #00ff99;
         }
 
-        /* Dark mode adjustments are applied by adding `.dark-mode` on the body */
-        body.dark-mode {
+        /* Apply dark backgrounds to all non-map UI areas by default */
+        body {
             background: var(--bg);
             color: var(--text);
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
         }
-        body.dark-mode .header, body.dark-mode .controls, body.dark-mode .info-panel {
+
+        /* Keep the map area visually separate; #map has its own background rule already */
+        .header {
+            background: var(--panel-bg);
+            padding: 12px 16px;
+            border-bottom: 1px solid #222;
+        }
+
+        .controls {
             background: transparent;
+            padding: 8px 16px 16px 16px;
         }
-        body.dark-mode .legend { background: rgba(20,20,20,0.95); color: var(--text); }
-        body.dark-mode .info-card { background: var(--card-bg); color: var(--text); border-left-color: var(--accent); }
-        body.dark-mode select, body.dark-mode input { background: #141414; color: var(--text); border-color: #2b2b2b }
-        body.dark-mode .error { background: #b71c1c }
+
+        .info-panel {
+            background: transparent;
+            color: var(--text);
+        }
+
+        .legend { background: rgba(18,18,18,0.95); color: var(--text); }
+        .info-card { background: var(--card-bg); color: var(--text); border-left-color: var(--accent); }
+        select, input { background: #141414; color: var(--text); border-color: #2b2b2b }
+        .error { background: #b71c1c }
         * {
             margin: 0;
             padding: 0;
