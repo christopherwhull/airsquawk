@@ -281,6 +281,8 @@ function generateHeatmapData() {
 }
 
 // --- Middleware ---
+// Serve a no-content response for favicon requests to avoid 404 spam in logs
+app.get('/favicon.ico', (req, res) => { res.status(204).end(); });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 const accessLogStream = fs.createWriteStream(path.join(__dirname, config.server.accessLogFile), { flags: 'a' });
