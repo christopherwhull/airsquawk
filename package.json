@@ -22,6 +22,7 @@
     "restart:pm2": "npx pm2 restart aircraft-dashboard",
     "restart:headless": "powershell -ExecutionPolicy Bypass -File tools/restart-server-headless.ps1",
     "test:all": "node tools/test-all.js",
+    "test:leaflet": "node tools/leaflet-test.js",
     "enable-git-hooks": "git config core.hooksPath .githooks"
   },
   "dependencies": {
