@@ -31,15 +31,23 @@ Key benefits:
 
 ---
 
-## Quick Links
-- [Live Tab](Live.md) — Real-time aircraft tracking and live statistics
-- [Airlines Tab](Airlines.md) — Airline activity statistics and flight drilldown
-- [Flights Tab](Flights.md) — Historical flight reconstruction and tracking
-- [Positions Tab](Positions.md) — Position statistics and time-series analysis
-- [Squawk Tab](Squawk.md) — Squawk code transition analysis
-- [Heatmap Tab](Heatmap.md) — Aircraft position density visualization
-- [Reception Tab](Reception.md) — ADS-B signal reception range analysis
-- [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary
+-## Quick Links
+- [Live Tab](Live.md) — Real-time aircraft tracking and live statistics  
+	**APIs used:** `/api/live-stats`, `/api/aircraft` (WebSocket updates)
+- [Airlines Tab](Airlines.md) — Airline activity statistics and flight drilldown  
+	**APIs used:** `/api/airline-stats`, `/api/airline-flights`
+- [Flights Tab](Flights.md) — Historical flight reconstruction and tracking  
+	**APIs used:** `/api/flights`
+- [Positions Tab](Positions.md) — Position statistics and time-series analysis  
+	**APIs used:** `/api/position-stats`, `/api/position-timeseries-live`
+- [Squawk Tab](Squawk.md) — Squawk code transition analysis  
+	**APIs used:** `/api/squawk-transitions`
+- [Heatmap Tab](Heatmap.md) — Aircraft position density visualization  
+	**APIs used:** `/api/heatmap-data`, `/api/heatmap-stats`, (viewer route `/heatmap-leaflet`)
+- [Reception Tab](Reception.md) — ADS-B signal reception range analysis  
+	**APIs used:** `/api/reception-range`
+- [Cache Status](Cache_Status.md) — Details and examples for `/api/cache-status` including `typeDatabase` summary  
+	**APIs used:** `/api/cache-status`
 - [Types Database](Types_Database.md) — How the curated `aircraft_types.json` is built & used
 - [API Summary](API.md) — New fields in endpoints (manufacturer, bodyType, aircraft_model) and examples
 - [Logo Management](Logo_Management.md) — Logo media pack generator and logo system documentation
