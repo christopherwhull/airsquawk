@@ -59,8 +59,48 @@ This directory contains all the utility scripts and tools for the Aircraft Dashb
 - `verify_backend_data.js` - Verify backend data integrity
 
 ### Server Management
-- `restart-server.sh` - Restart server (Bash)
-- `start_server.py` - Start server script
+- `tools/manage_services.py` - Cross-platform Python helper to start/stop/restart/status the development Node servers.
+
+Usage examples:
+
+```powershell
+# Start all services (server, geotiff, tile-proxy) in background
+python tools/manage_services.py start
+
+# Start and wait for health endpoints (wait up to 30s)
+python tools/manage_services.py start --wait --timeout 30
+
+# Restart services
+python tools/manage_services.py restart --wait
+
+# Stop services
+python tools/manage_services.py stop
+
+# Show status
+python tools/manage_services.py status
+```
+
+Notes:
+- The manager writes PID files and logs to `runtime/<service>.pid` and `runtime/<service>.log`.
+- This tool is intended for developer workflows and CI helpers; for production use a real
+	process supervisor such as `pm2`, `systemd`, or Docker.
+
+## MinIO safety note
+
+- This project may rely on a local MinIO server for multiple services. Do **not** restart
+	or stop the system-wide MinIO instance unless you understand the impact on other
+	services running on your machine.
+- `tools/manage_services.py` will not manage any service named `minio` by default. To
+	explicitly allow managing a `minio` service entry you must pass the explicit
+	`--force-minio` flag (or the deprecated `--manage-minio` alias). Example:
+
+```pwsh
+# Only do this if you are certain you want the manager to start/stop MinIO
+python .\tools\manage_services.py start --force-minio --wait --timeout 30
+```
+
+If you are unsure, avoid passing `--force-minio` and use your system's MinIO control
+scripts instead (e.g. the project's `start_minio.ps1` or your OS service manager).
 
 ### Investigation & Debugging
 
