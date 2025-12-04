@@ -1552,7 +1552,7 @@ def count_position_reports_24h() -> int:
         return 0
 
 
-def check_and_start_minio() -> bool:
+def check_and_start_minio(allow_start: bool = False) -> bool:
     """
     Check if MinIO server is running, optionally try to start it on Windows.
     
@@ -1577,13 +1577,18 @@ def check_and_start_minio() -> bool:
             print(f"\033[93mMinIO server not detected on {system_platform}...\033[0m")
             
             if system_platform == 'Windows':
+                # Only attempt to start MinIO automatically if explicitly allowed
+                if not allow_start:
+                    print('\033[93mMinIO auto-start is disabled by default. To allow this script to start MinIO, re-run with --allow-minio-start.\033[0m')
+                    return False
+
                 # Try to start MinIO on Windows
                 minio_start_script = r"C:\minio\start_minio.ps1"
                 if not os.path.exists(minio_start_script):
                     print(f"\033[91mError: MinIO start script not found at {minio_start_script}\033[0m")
                     print("Please start MinIO manually or install it at C:\\minio\\")
                     return False
-                
+
                 # Start MinIO in a new hidden PowerShell process
                 start_command = f"Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File {minio_start_script}' -WindowStyle Hidden"
                 subprocess.Popen(
@@ -1591,17 +1596,17 @@ def check_and_start_minio() -> bool:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
-                
+
                 # Wait for MinIO to start
                 print("Waiting for MinIO to start...")
                 time.sleep(5)
-                
+
                 # Verify it started
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(2)
                 result = sock.connect_ex(('localhost', 9000))
                 sock.close()
-                
+
                 if result == 0:
                     print("\033[92mMinIO server started successfully\033[0m")
                     return True
@@ -2514,6 +2519,8 @@ Benefits:
                         help='Run for a few iterations and exit (for testing purposes)')
     parser.add_argument('--read-only', action='store_true',
                         help='Run in read-only mode, disabling all local and S3 file writes')
+    parser.add_argument('--allow-minio-start', action='store_true', dest='allow_minio_start',
+                        help='Allow this script to attempt to start MinIO automatically (disabled by default). Use with caution.')
     
     # Explicit enable/disable flags for S3 behavior. Default is enabled.
     s3_group = parser.add_mutually_exclusive_group()
@@ -2573,7 +2580,7 @@ Benefits:
     # Initialize S3 client if enabled, before loading records
     if args.enable_s3:
         print("Checking MinIO server status...")
-        if check_and_start_minio():
+        if check_and_start_minio(allow_start=args.allow_minio_start):
             print("Initializing S3 client...")
             if initialize_s3_client(args.s3_endpoint, args.s3_access_key, args.s3_secret_key):
                 s3_upload_enabled = True  # Enable S3 uploads

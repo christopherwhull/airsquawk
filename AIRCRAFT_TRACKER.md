@@ -31,7 +31,8 @@ pip install boto3 requests
 2. Ensure MinIO is running:
 
 **Windows:**
-The script will automatically try to start MinIO from `C:\minio\start_minio.ps1` if it's not running.
+The script will detect MinIO on startup but will NOT attempt to start it automatically by default.
+If you explicitly want the script to start a local MinIO instance (Windows-only automatic start), run the tracker with `--allow-minio-start` and ensure the startup script exists at `C:\minio\start_minio.ps1`.
 
 **Linux:**
 Start MinIO manually before running the tracker:
@@ -177,8 +178,8 @@ For each aircraft, the tracker:
 ## Platform Notes
 
 ### Windows
-- MinIO auto-start supported (requires `C:\minio\start_minio.ps1`)
-- PowerShell used for hidden window startup
+- MinIO auto-start is supported but disabled by default. To allow automatic startup, pass `--allow-minio-start` when running the script. The startup script should be located at `C:\minio\start_minio.ps1`.
+- PowerShell is used for hidden window startup when auto-start is enabled
 - Paths automatically converted for S3 (backslash → forward slash)
 
 ### Linux
