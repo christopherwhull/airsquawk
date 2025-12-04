@@ -21,9 +21,17 @@
     "start:pm2": "npx pm2 start server.js --name aircraft-dashboard || npx pm2 start server.js --name aircraft-dashboard --update-env",
     "restart:pm2": "npx pm2 restart aircraft-dashboard",
     "restart:headless": "powershell -ExecutionPolicy Bypass -File tools/restart-server-headless.ps1",
+    "services:start": "python tools/manage_services.py start",
+    "services:stop": "python tools/manage_services.py stop",
+    "services:restart": "python tools/manage_services.py restart",
+    "services:status": "python tools/manage_services.py status",
     "test:all": "node tools/test-all.js",
     "test:leaflet": "node tools/leaflet-test.js",
     "enable-git-hooks": "git config core.hooksPath .githooks"
+  },
+  "devNotes": {
+    "scriptShellPreference": "python",
+    "note": "Do not add new PowerShell scripts (.ps1) for cross-platform helpers; prefer Python scripts and call them from npm scripts using 'python <script>'. This keeps tooling cross-platform and avoids accidental service restarts on Windows when other tools (e.g. MinIO) are managed separately."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.937.0",
