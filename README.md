@@ -103,6 +103,30 @@ When updating the server with new code, follow these steps to ensure a smooth tr
      bash restart-server.sh
      ```
 
+**Service Manager (Python)**
+
+- **Purpose:** A small cross-platform Python helper is provided to start/stop/restart the local Node services used for development (main server, GeoTIFF server, tile proxy). It creates PID and log files under `runtime/` and can wait for health endpoints.
+- **Commands (from project root):**
+   - `python tools/manage_services.py start` — start all services in the background
+   - `python tools/manage_services.py stop` — stop running services
+   - `python tools/manage_services.py restart` — restart services
+   - `python tools/manage_services.py status` — show PID and health status
+- **npm wrappers:** the project exposes convenient npm scripts that call the Python manager:
+   - `npm run services:start`
+   - `npm run services:stop`
+   - `npm run services:restart`
+   - `npm run services:status`
+- **Notes:**
+   - This helper is intended for local development and convenience only. For production use a proper process manager (`systemd`, `pm2`, containers, etc.).
+   
+   **MinIO safety:**
+
+   - The service manager will not manage a service named `minio` by default to avoid
+     accidentally starting or stopping a system-wide MinIO instance which may be used
+     by other tooling on your machine. To manage MinIO explicitly pass the
+     `--force-minio` flag (or the deprecated `--manage-minio` alias). See
+     `tools/README.md` for details and examples.
+
 ## Installation
 
 ### Quick Start (All Platforms)
@@ -218,6 +242,15 @@ Access console at: `http://localhost:9001`
 - **Squawk**: Squawk code transition tracking
 - **Heatmap**: Geographic density visualization
 - **Reception**: Range analysis by bearing and altitude
+
+**Console / Unicode**
+
+- The `aircraft_tracker.py` utility prints box-drawing characters for framed output. If your terminal does not use UTF-8, Python may raise a `UnicodeEncodeError`.
+- Recommended ways to run with UTF-8 rendering:
+   - `python -X utf8 aircraft_tracker.py` — enable Python's UTF-8 mode
+   - In PowerShell: `chcp 65001` then `python aircraft_tracker.py`
+   - Or set the environment for the session: ``$env:PYTHONIOENCODING='utf-8'`` then run the script
+- The script also supports a strict flag: `python aircraft_tracker.py --utf8-strict` — in strict mode the script will exit if the console cannot be configured for UTF-8. The default behavior is tolerant: unsupported characters are replaced so the script does not crash.
 - **Cache**: Position cache status and statistics
 
 ### Time Controls
