@@ -269,13 +269,26 @@ Position statistics can switch between:
 
 ## API Endpoints
 
-- `/api/position-timeseries-live` - Position time series data
+For comprehensive API documentation, see [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md).
+
+### Core Endpoints
+- `/api/positions` - Live aircraft positions
+- `/api/heatmap-data` - Geographic density grid (1nm resolution)
+- `/api/aircraft/:icao24` - Individual aircraft details
+- `/api/aircraft/batch` - Bulk aircraft enrichment
+- `/api/airlines` - Airline database
+- `/api/v2logos/:code` - Logo serving
+
+### Analytics Endpoints
 - `/api/airline-stats` - Airline statistics
 - `/api/flights` - Flight data
 - `/api/squawk-transitions` - Squawk code changes
-- `/api/heatmap-data` - Geographic density grid
 - `/api/reception-range` - Reception range analysis
+
+### System Endpoints
+- `/api/health` - System health status
 - `/api/cache-status` - Cache statistics
+- `/api/server-status` - Server performance metrics
 - `/api/config` - UI configuration
 
 ## Background Jobs
