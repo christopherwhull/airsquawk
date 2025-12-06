@@ -1422,6 +1422,10 @@ async function loadUnifiedPositionStats(hoursBack = null) {
             airlines: bucket.airlines?.slice(0, Math.round(bucket.airlines.length * (bucketAirlines.size / Math.max(memoryAirlines.size, 1))))
         })) : [];
         
+        // Store current time range for graph filtering
+        positionDataSources.startTime = startTime;
+        positionDataSources.endTime = endTime;
+        
         // Update active stat card styling
         updateActiveDataSource();
         
@@ -1474,6 +1478,15 @@ function drawPositionsTimeSeriesGraph(memoryData) {
         return;
     }
     
+    // Filter data based on current time range if available
+    let filteredData = memoryData;
+    if (positionDataSources.startTime && positionDataSources.endTime) {
+        filteredData = memoryData.filter(bucket => {
+            const timestamp = bucket.timestamp;
+            return timestamp >= positionDataSources.startTime && timestamp <= positionDataSources.endTime;
+        });
+    }
+    
     // Check which metrics to display
     const showPositions = document.getElementById('graph-positions')?.checked ?? true;
     const showAircraft = document.getElementById('graph-aircraft')?.checked ?? true;
@@ -1484,8 +1497,8 @@ function drawPositionsTimeSeriesGraph(memoryData) {
     const chartWidth = canvas.width - padding.left - padding.right;
     const chartHeight = canvas.height - padding.top - padding.bottom;
     
-    // Extract data points
-    const dataPoints = memoryData.map(bucket => ({
+    // Extract data points from filtered data
+    const dataPoints = filteredData.map(bucket => ({
         timestamp: bucket.timestamp,
         positions: bucket.positionCount || 0,
         aircraft: bucket.aircraft?.length || 0,
@@ -1629,7 +1642,10 @@ function drawPositionsTimeSeriesGraph(memoryData) {
     ctx.fillStyle = '#e0e0e0';
     ctx.font = 'bold 16px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Position Statistics Over Time', canvas.width / 2, 25);
+    const titleText = positionDataSources.startTime && positionDataSources.endTime 
+        ? `Position Statistics (${new Date(positionDataSources.startTime).toLocaleString()} - ${new Date(positionDataSources.endTime).toLocaleString()})`
+        : 'Position Statistics Over Time';
+    ctx.fillText(titleText, canvas.width / 2, 25);
 }
 
 async function loadPositionStatsLive() {
