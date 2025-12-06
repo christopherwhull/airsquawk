@@ -520,6 +520,11 @@ If you prefer a different location, set the corresponding environment variables 
 
 ## Version History
 
+### v2.0.1 (2025-12-06)
+- **Enhanced Tile Proxy Server**: Improved aviation chart caching and performance
+- **Repository Cleanup**: Removed cache files from version control, updated .gitignore
+- **Production Ready**: Enhanced cache management and deployment hygiene
+
 ### v1.0.2 (2025-11-28)
 - **Cross-Platform**: Fully compatible with Windows, Linux, and macOS
 - **Auto-Bucket Creation**: S3 buckets automatically created on startup
