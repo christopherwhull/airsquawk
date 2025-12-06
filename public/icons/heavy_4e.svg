@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="24" viewBox="0 0 36 24">
+  <path d="M32 16v-2l-12-7V3.5c0-.83-.67-1.5-1.5-1.5S17 2.67 17 3.5V7l-12 7v2l12-3.5V19l-4 2.5V22l5-2 5 2v-0.5L20 19v-6.5L32 16z" fill="#666"/>
+  <rect x="6" y="17" width="24" height="2" rx="1" fill="#444"/>
+  <!-- Four engines -->
+  <circle cx="7" cy="18" r="1.5" fill="#333"/>
+  <circle cx="15" cy="18" r="1.5" fill="#333"/>
+  <circle cx="21" cy="18" r="1.5" fill="#333"/>
+  <circle cx="29" cy="18" r="1.5" fill="#333"/>
+  <!-- Wing details -->
+  <path d="M17 7l-5 4 3-2L17 7zM19 7l5 4-3-2L19 7z" fill="#555"/>
+</svg>

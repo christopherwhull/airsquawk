@@ -747,6 +747,8 @@
         const AIRCRAFT_CACHE_TTL = 60 * 1000; // 60s
         // Airline name to code mapping for logo lookup
         const airlineNameToCode = new Map(); // name -> code
+        // Vertical rate tracking for color coding aircraft
+        const verticalRateCache = new Map(); // hex -> { altitude, timestamp, verticalRate }
 
         async function fetchAircraftInfo(hex) {
             if (!hex) return null;
@@ -1014,6 +1016,32 @@
                 liveTracksIntervalId = null;
             }
             try { liveTracksLayer.clearLayers(); if (map.hasLayer(liveTracksLayer)) map.removeLayer(liveTracksLayer); } catch (e) {}
+        }
+
+        function toggleLivePositions() {
+            const showLiveElem = document.getElementById('show-live');
+            if (!showLiveElem) return;
+            if (showLiveElem.checked) {
+                startLivePositionsPolling();
+            } else {
+                stopLivePositionsPolling();
+            }
+        }
+
+        function startLivePositionsPolling() {
+            if (liveIntervalId) return;
+            // initial run
+            fetchLivePositions();
+            liveIntervalId = setInterval(fetchLivePositions, 10000); // poll every 10 seconds
+            if (!map.hasLayer(liveLayer)) liveLayer.addTo(map);
+        }
+
+        function stopLivePositionsPolling() {
+            if (liveIntervalId) {
+                clearInterval(liveIntervalId);
+                liveIntervalId = null;
+            }
+            clearLiveLayer();
         }
 
         async function fetchAndDrawLongTracks() {
@@ -1432,6 +1460,27 @@
             const rawAlt = (p.alt ?? p.altitude ?? p.Alt ?? p.Altitude ?? p.max_alt_ft ?? p.max_alt ?? p.alt_ft ?? '');
             const altNum = Number(rawAlt);
             const alt = (rawAlt !== '' && rawAlt != null && Number.isFinite(altNum)) ? `${altNum.toLocaleString()} ft` : (rawAlt || '');
+
+            // Calculate vertical rate for color coding
+            let verticalRate = 0;
+            if (altNum && Number.isFinite(altNum)) {
+                const currentTime = p.timestamp ? Number(p.timestamp) : Date.now();
+                const prevData = verticalRateCache.get(hexKey);
+                if (prevData && prevData.altitude && prevData.timestamp) {
+                    const timeDiff = (currentTime - prevData.timestamp) / 1000; // seconds
+                    if (timeDiff > 0 && timeDiff < 300) { // Only calculate if within 5 minutes
+                        const altDiff = altNum - prevData.altitude; // feet
+                        verticalRate = (altDiff / timeDiff) * 60; // feet per minute
+                    }
+                }
+                // Update cache
+                verticalRateCache.set(hexKey, {
+                    altitude: altNum,
+                    timestamp: currentTime,
+                    verticalRate: verticalRate
+                });
+            }
+
             // Speed: accept gs, speed, groundSpeed, or max_speed_kt
             const rawSpeed = (p.gs ?? p.speed ?? p.groundSpeed ?? p.GS ?? p.max_speed_kt ?? p.speed_kt ?? '');
             const speedNum = Number(rawSpeed);
@@ -1442,11 +1491,21 @@
             const lat = (p.lat || p.latitude || p.Lat) || '';
             const lon = (p.lon || p.longitude || p.Lon) || '';
             const timeStr = p.timestamp ? (isNaN(Number(p.timestamp)) ? new Date(p.timestamp).toISOString() : new Date(Number(p.timestamp)).toISOString()) : '';
+
+            // Determine airline logo
+            let airlineLogoHtml = '';
+            if (airline) {
+                const airlineCode = airlineNameToCode.get(airline.toLowerCase());
+                if (airlineCode) {
+                    airlineLogoHtml = `<img src="/api/v2logos/${encodeURIComponent(airlineCode)}" alt="${airline}" style="max-width:40px;max-height:20px;margin-left:8px;vertical-align:middle;border-radius:2px;">`;
+                }
+            }
+
             return `
                 <div style="min-width:200px">
                     <strong>${(p.hex||'').toUpperCase()}${callsign ? ' — ' + callsign : ''}</strong>
                     <div>Registration: <em>${reg || '—'}</em></div>
-                    <div>Airline: <em>${airline || '—'}</em></div>
+                    <div>Airline: <em>${airline || '—'}</em>${airlineLogoHtml}</div>
                     <div>Squawk: <em>${squawk || '—'}</em></div>
                     <div>Alt: <em>${alt || '—'}</em></div>
                     <div>Speed: <em>${speed || '—'}</em></div>
@@ -1667,12 +1726,12 @@
 
         // Aircraft icon mappings from dump1090-fa
         const TypeDesignatorIcons = {
-            'A10': 'hi_perf', 'A148': 'hi_perf', 'A225': 'heavy_4e', 'A3': 'hi_perf', 'A37': 'jet_nonswept',
-            'A5': 'cessna', 'A6': 'hi_perf', 'A700': 'jet_nonswept', 'AC80': 'twin_small', 'AC90': 'twin_small',
+            'A10': 'hi_perf', 'A148': 'hi_perf', 'A21N': 'airliner', 'A225': 'heavy_4e', 'A3': 'hi_perf', 'A359': 'airliner',
+            'A37': 'jet_nonswept', 'A388': 'heavy_4e', 'A5': 'cessna', 'A6': 'hi_perf', 'A700': 'jet_nonswept', 'AC80': 'twin_small', 'AC90': 'twin_small',
             'AC95': 'twin_small', 'AJ27': 'jet_nonswept', 'AJET': 'hi_perf', 'AN28': 'twin_small', 'ARCE': 'hi_perf',
             'AT3': 'hi_perf', 'ATG1': 'jet_nonswept', 'B18T': 'twin_small', 'B190': 'twin_small', 'B25': 'twin_large',
             'B350': 'twin_small', 'B52': 'heavy_4e', 'B712': 'jet_swept', 'B721': 'airliner', 'B722': 'airliner',
-            'BALL': 'balloon', 'BE10': 'twin_small', 'BE20': 'twin_small', 'BE30': 'twin_small', 'BE32': 'twin_small',
+            'B738': 'airliner', 'B763': 'airliner', 'B77W': 'heavy_2e', 'BALL': 'balloon', 'BE10': 'twin_small', 'BE20': 'twin_small', 'BE30': 'twin_small', 'BE32': 'twin_small',
             'BE40': 'jet_nonswept', 'BE99': 'twin_small', 'BE9L': 'twin_small', 'BE9T': 'twin_small', 'BN2T': 'twin_small',
             'BPOD': 'jet_swept', 'BU20': 'twin_small', 'C08T': 'jet_swept', 'C125': 'twin_small', 'C212': 'twin_small',
             'C21T': 'twin_small', 'C22J': 'jet_nonswept', 'C25A': 'jet_nonswept', 'C25B': 'jet_nonswept', 'C25C': 'jet_nonswept',
@@ -1731,42 +1790,59 @@
             'C0': 'ground_unknown', 'C1': 'ground_emergency', 'C2': 'ground_service', 'C3': 'ground_fixed', 'C4': 'ground_fixed', 'C5': 'ground_fixed', 'C6': 'ground_unknown', 'C7': 'ground_unknown'
         };
 
-        // Function to get icon name for aircraft
+        // Function to get icon name for aircraft based on type
         function getIconForAircraft(info) {
-            return 'aircraft'; // Use the generic aircraft icon for all
+            // Try type designator first (most specific)
+            if (info.typecode && TypeDesignatorIcons[info.typecode]) {
+                return TypeDesignatorIcons[info.typecode];
+            }
+
+            // Try category
+            if (info.category && CategoryIcons[info.category]) {
+                return CategoryIcons[info.category];
+            }
+
+            // Try type description
+            if (info.type_description && TypeDescriptionIcons[info.type_description]) {
+                return TypeDescriptionIcons[info.type_description];
+            }
+
+            // Default to generic aircraft icon
+            return 'aircraft';
         }
 
         // Create an aircraft logo icon (image) using known aircraft info.
         // `info` may contain `manufacturerLogo` (relative URL) or `manufacturer`/`aircraft_model`.
-        function createAircraftLogoIcon(info = {}, rotation = 0, size = 50) {
+        function createAircraftLogoIcon(info = {}, rotation = 0, size = 50, verticalRate = 0) {
             // Enforce minimum size of 50x50 pixels
             const finalSize = Math.max(size, 50);
 
-            // Determine image source
+            // Determine color based on vertical rate (feet per minute)
+            let color = '#ff3300'; // default red
+            if (verticalRate > 500) {
+                color = '#00ff00'; // green for climbing
+            } else if (verticalRate < -500) {
+                color = '#ff0000'; // red for descending
+            } else {
+                color = '#9900ff'; // purple for level flight
+            }
+
+            // Determine image source - use only aircraft type icons
             let src = null;
             try {
-                if (info.manufacturerLogo && typeof info.manufacturerLogo === 'string') src = info.manufacturerLogo;
-                else if (info.manufacturer && typeof info.manufacturer === 'string') {
-                    // Try to map airline name to code for logo lookup
-                    const airlineCode = airlineNameToCode.get(info.manufacturer.toLowerCase());
-                    if (airlineCode) {
-                        src = `/api/v2logos/${encodeURIComponent(airlineCode)}`;
-                    } else {
-                        // Fallback to using the name directly (for manufacturer logos)
-                        src = `/api/v2logos/${encodeURIComponent(info.manufacturer)}`;
-                    }
-                }
-                else if (info.aircraft_model && typeof info.aircraft_model === 'string') src = `/api/v2logos/${encodeURIComponent(info.aircraft_model.split(' ')[0]||'')}`;
-                else {
-                    // Use local piaware icons based on aircraft type
-                    const icon = getIconForAircraft(info);
-                    src = `/api/piaware-icons/${icon}`;
+                // Use aircraft type icons only
+                const icon = getIconForAircraft(info);
+                if (icon && icon !== 'aircraft') {
+                    src = `/icons/${icon}.svg`;
+                } else {
+                    // Fallback to generic aircraft icon
+                    src = `/icons/aircraft.svg`;
                 }
             } catch (e) {}
             // Fallback to simple aircraft SVG from piaware/dump1090-fa style
-            const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${finalSize}px;height:${finalSize}px;object-fit:contain;display:block;border-radius:3px;border:1px solid rgba(255,255,255,0.3);"/>` : `<svg xmlns="http://www.w3.org/2000/svg" width="${finalSize}" height="${finalSize}" viewBox="0 0 36 36">
+            const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${finalSize}px;height:${finalSize}px;object-fit:contain;display:block;border-radius:3px;border:1px solid rgba(255,255,255,0.3);filter: drop-shadow(0 0 3px ${color});"/>` : `<svg xmlns="http://www.w3.org/2000/svg" width="${finalSize}" height="${finalSize}" viewBox="0 0 36 36">
                 <defs>
-                    <style>.cls-1{fill:#ff3300;}.cls-2{fill:#ffffff;}</style>
+                    <style>.cls-1{fill:${color};}.cls-2{fill:#ffffff;}</style>
                 </defs>
                 <g>
                     <path class="cls-1" d="M18,4l2,4h8l-6,4,2,6-6-4-6,4,2-6-6-4h8Z"/>
@@ -1945,6 +2021,26 @@
                     if (typeof lat !== 'number' || typeof lon !== 'number') return;
                     const hex = (p.hex || '').toLowerCase();
                     seenHexes.add(hex);
+
+                    // Calculate vertical rate for color coding (used for both new and existing markers)
+                    let verticalRate = 0;
+                    try {
+                        const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
+                        if (alt !== null && typeof alt === 'number') {
+                            const now = Date.now();
+                            const prevData = verticalRateCache.get(hex);
+                            if (prevData) {
+                                const timeDiff = (now - prevData.timestamp) / 1000; // seconds
+                                if (timeDiff > 0 && timeDiff < 300) { // within 5 minutes
+                                    const altDiff = alt - prevData.altitude; // feet
+                                    verticalRate = (altDiff / timeDiff) * 60; // feet per minute
+                                }
+                            }
+                            // Update cache
+                            verticalRateCache.set(hex, { altitude: alt, timestamp: now });
+                        }
+                    } catch (e) {}
+
                     // Merge cached aircraft info into position object for tooltip/popups
                     try {
                         const cachedInfo = aircraftInfoCache.get(hex);
@@ -2013,6 +2109,22 @@
                                 // our createAircraftIcon wraps the svg in a div, update its transform
                                 const inner = el.querySelector && el.querySelector('div');
                                 if (inner) inner.style.transform = `rotate(${rot || 0}deg)`;
+                            }
+
+                            // Update icon color based on vertical rate change
+                            try {
+                                const prevVerticalRate = existing._verticalRate || 0;
+                                if (Math.abs(verticalRate - prevVerticalRate) > 100) { // significant change
+                                    const aircraftInfo = {
+                                        manufacturer: p.manufacturer || p.airline || null,
+                                        typecode: p.aircraft_type || null
+                                    };
+                                    const newIcon = createAircraftLogoIcon(aircraftInfo, rot || 0, 50, verticalRate);
+                                    existing.setIcon(newIcon);
+                                    existing._verticalRate = verticalRate;
+                                }
+                            } catch (e) {
+                                // ignore icon update errors
                             }
 
                             // update tooltip content from merged marker._posData (preserve batch-enriched fields)
@@ -2096,9 +2208,12 @@
                     // Try to use logo icon if manufacturer info is available, otherwise use SVG icon
                     let icon;
                     try {
-                        const aircraftInfo = p.manufacturer || p.airline || null;
-                        if (aircraftInfo) {
-                            icon = createAircraftLogoIcon({ manufacturer: aircraftInfo }, rot || 0, 50);
+                        const aircraftInfo = {
+                            manufacturer: p.manufacturer || p.airline || null,
+                            typecode: p.aircraft_type || null
+                        };
+                        if (aircraftInfo.manufacturer || aircraftInfo.typecode) {
+                            icon = createAircraftLogoIcon(aircraftInfo, rot || 0, 50, verticalRate);
                         } else {
                             icon = createAircraftIcon('#ff3300', 50, rot || 0);
                         }

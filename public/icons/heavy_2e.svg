@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" viewBox="0 0 32 24">
+  <path d="M28 16v-2l-10-6V3.5c0-.83-.67-1.5-1.5-1.5S15 2.67 15 3.5V8l-10 6v2l10-3V19l-3 2V22l4-1.5 4 1.5v-1L18 19v-6L28 16z" fill="#666"/>
+  <rect x="6" y="17" width="20" height="2" rx="1" fill="#444"/>
+  <!-- Two large engines -->
+  <circle cx="8" cy="18" r="1.5" fill="#333"/>
+  <circle cx="24" cy="18" r="1.5" fill="#333"/>
+  <!-- Wing details -->
+  <path d="M15 8l-4 3 2-1.5L15 8zM17 8l4 3-2-1.5L17 8z" fill="#555"/>
+</svg>

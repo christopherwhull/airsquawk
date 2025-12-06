@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <path d="M21 16v-2l-6-3.5V3.5c0-.83-.67-1.5-1.5-1.5S12 2.67 12 3.5V10l-6 3.5v2l6-2V19l-1.5 1V22l3-1 3 1v-2L15 19v-5L21 16z" fill="#666"/>
+  <path d="M15 19l1.5 1V22l-1.5-1v-2zM9 19l-1.5 1V22l1.5-1v-2z" fill="#444"/>
+  <!-- Swept wing details -->
+  <path d="M12 10l-3 2 1.5-1.5L12 10zM12 10l3 2-1.5-1.5L12 10z" fill="#555"/>
+</svg>
