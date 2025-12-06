@@ -9,6 +9,7 @@
     <title>Aircraft Heatmap - 1nm Grid</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
     <style>
         :root {
             --bg: #0f0f10;
@@ -331,6 +332,10 @@
         </div>
 
         <div id="error" class="error"></div>
+        
+        <div style="background: rgba(18,18,18,0.8); color: #bbb; padding: 8px 16px; font-size: 12px; border-bottom: 1px solid #333;">
+            <strong>FAA Aviation Charts:</strong> Charts only cover specific geographic areas (primarily US airspace). Areas outside coverage will appear blank. Zoom to 7-12x for best results.
+        </div>
     </div>
 
     <div id="map"></div>
@@ -414,13 +419,13 @@
         map.getPane('heatmapPane').style.zIndex = 400; // below livePane/persistentPane
 
         // Add OpenStreetMap base layer
-        const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors',
             maxZoom: 18
         });
 
         // Add OpenTopoMap for terrain visualization
-        const openTopoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        const openTopoLayer = L.tileLayer('https://tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
             maxZoom: 17
         });
@@ -432,54 +437,80 @@
             subdomains: 'abcd'
         });
 
-        // Official FAA IFR Low Chart from ArcGIS
-        const faaIfrLow = L.tileLayer('http://localhost:3003/tile/IFR_AreaLow/{z}/{y}/{x}', {
-            attribution: '© FAA',
-            maxZoom: 12,
-            minZoom: 7,
-            zIndex: 200,
-            opacity: 0.8
-        });
+        // FAA aviation chart layers from local tile proxy
+        const proxyBase = 'http://localhost:3004/tile';
 
-        // Official FAA IFR High Chart
-        const faaIfrHigh = L.tileLayer('http://localhost:3003/tile/IFR_Enroute_High/{z}/{y}/{x}', {
+        // Official FAA VFR Terminal Area Chart
+        const faaVfrTerminal = L.tileLayer(`${proxyBase}/vfr-terminal/{z}/{x}/{y}`, {
             attribution: '© FAA',
             maxZoom: 12,
             minZoom: 7,
             zIndex: 200,
-            opacity: 0.8
+            opacity: 0.8,
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' // transparent 1x1 pixel
         });
 
         // Official FAA VFR Sectional Chart
-        const faaVfrSectional = L.tileLayer('http://localhost:3003/tile/VFR_Sectional/{z}/{y}/{x}', {
+        const faaVfrSectional = L.tileLayer(`${proxyBase}/vfr-sectional/{z}/{x}/{y}`, {
             attribution: '© FAA',
             maxZoom: 12,
             minZoom: 7,
             zIndex: 200,
-            opacity: 0.8
+            opacity: 0.8,
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' // transparent 1x1 pixel
         });
 
-        // Official FAA VFR Terminal Area Chart
-        const faaVfrTerminal = L.tileLayer('http://localhost:3003/tile/VFR_Terminal/{z}/{y}/{x}', {
+        // Official FAA IFR Area Low Chart
+        const faaIfrAreaLow = L.tileLayer(`${proxyBase}/ifr-arealow/{z}/{x}/{y}`, {
             attribution: '© FAA',
             maxZoom: 12,
             minZoom: 7,
             zIndex: 200,
-            opacity: 0.8
+            opacity: 0.8,
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' // transparent 1x1 pixel
+        });
+
+        // Official FAA IFR Enroute High Chart
+        const faaIfrHigh = L.tileLayer(`${proxyBase}/ifr-enroute-high/{z}/{x}/{y}`, {
+            attribution: '© FAA',
+            maxZoom: 12,
+            minZoom: 7,
+            zIndex: 200,
+            opacity: 0.8,
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' // transparent 1x1 pixel
+        });
+
+        // ArcGIS base map layers
+        const arcgisImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+            maxZoom: 18
+        });
+
+        const arcgisStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
+            maxZoom: 18
+        });
+
+        const arcgisTopo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+            maxZoom: 18
         });
 
         // Layer control
         const baseLayers = {
-            "OpenStreetMap": osmLayer,
-            "CartoDB Voyager": cartoVoyagerLayer,
-            "OpenTopoMap": openTopoLayer
+            "OpenStreetMap (Internet)": osmLayer,
+            "CartoDB Voyager (Internet)": cartoVoyagerLayer,
+            "OpenTopoMap (Internet)": openTopoLayer,
+            "ArcGIS World Imagery": arcgisImagery,
+            "ArcGIS World Street Map": arcgisStreet,
+            "ArcGIS World Topo": arcgisTopo
         };
         
         const overlayLayers = {
-            "FAA IFR Low": faaIfrLow,
-            "FAA IFR High": faaIfrHigh,
+            "FAA VFR Terminal": faaVfrTerminal,
             "FAA VFR Sectional": faaVfrSectional,
-            "FAA VFR Terminal Area": faaVfrTerminal
+            "FAA IFR Area Low": faaIfrAreaLow,
+            "FAA IFR Enroute High": faaIfrHigh
         };
         
         osmLayer.addTo(map);
@@ -711,6 +742,8 @@
         // Cache aircraft info fetched from server (/api/aircraft/:icao24)
         const aircraftInfoCache = new Map(); // hex -> { ts, data }
         const AIRCRAFT_CACHE_TTL = 60 * 1000; // 60s
+        // Airline name to code mapping for logo lookup
+        const airlineNameToCode = new Map(); // name -> code
 
         async function fetchAircraftInfo(hex) {
             if (!hex) return null;
@@ -727,6 +760,25 @@
                 return null;
             }
         }
+
+        // Load airline name-to-code mapping for logo lookup
+        async function loadAirlineMapping() {
+            try {
+                const res = await fetch('/api/airlines');
+                if (!res.ok) return;
+                const airlines = await res.json();
+                // Populate the mapping: name -> code
+                for (const [code, info] of Object.entries(airlines)) {
+                    if (info && info.name) {
+                        airlineNameToCode.set(info.name.toLowerCase(), code);
+                    }
+                }
+                console.log(`Loaded ${airlineNameToCode.size} airline name-to-code mappings`);
+            } catch (e) {
+                console.error('Failed to load airline mapping:', e);
+            }
+        }
+
         // Layer used to draw a hovered aircraft track (temporary)
         let trackLayer = L.layerGroup();
         let hoverTrackHex = null;
@@ -998,23 +1050,16 @@
                         try {
                             const pts = (res && res.points) || [];
                                 if (pts.length >= 2) {
-                                // Compute altitude delta (if alt available) and choose color: green for climb, red for descent, default teal
-                                let color = '#00ff99';
+                                // Compute altitude delta (if alt available) and choose color: green for climb, red for descent, yellow for static
+                                let color = 'yellow'; // Default to yellow for static/level flight
                                 const firstAlt = pts[0] && typeof pts[0].alt === 'number' ? pts[0].alt : null;
                                 const lastAlt = pts[pts.length - 1] && typeof pts[pts.length - 1].alt === 'number' ? pts[pts.length - 1].alt : null;
-                                let hasClimbDesc = false;
                                 if (firstAlt !== null && lastAlt !== null) {
                                     const delta = lastAlt - firstAlt;
                                     const thresh = 50; // altitude change threshold in feet to consider climb/descent
-                                    if (delta > thresh) { color = 'green'; hasClimbDesc = true; }
-                                    else if (delta < -thresh) { color = 'red'; hasClimbDesc = true; }
-                                }
-                                // If no clear climb/descent, highlight sharp angular changes in yellow
-                                if (!hasClimbDesc) {
-                                    try {
-                                        const ang = maxTrackAngularChange(pts);
-                                        if (ang > 5) color = 'yellow';
-                                    } catch (e) {}
+                                    if (delta > thresh) { color = 'green'; } // Climbing
+                                    else if (delta < -thresh) { color = 'red'; } // Descending
+                                    // else remains yellow for static/level flight
                                 }
                                 const latlngs = densifyTrackPoints(pts, 0.1);
                                 // Draw historical (long) tracks on the persistent pane so they sit above overlay tiles
@@ -1507,41 +1552,217 @@
         }
 
         // Create an aircraft SVG icon (color can be changed)
-        function createAircraftIcon(color = '#ff3300', size = 20, rotation = 0) {
-            const svg = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
-                    <path d="M21 11.5c0-.28-.22-.5-.5-.5h-6.79L12 4.21 10.29 5.92 11.5 7.12 8.75 9.88 7.34 9.5c-.14-.03-.28-.02-.41.04L4 10.5c-.44.14-.75.55-.75 1v1c0 .45.31.86.75 1l2.93.84c.13.04.27.06.41.04l1.41-.38L11.5 16.9 10.29 18.1 12 19.79l1.71-1.71H21.5c.28 0 .5-.22.5-.5v-5.08z" fill="${color}" />
-                </svg>`;
-            const html = `<div style="transform: rotate(${rotation}deg); width: ${size}px; height:${size}px; display:flex; align-items:center; justify-content:center">${svg}</div>`;
-            return L.divIcon({ html, className: 'aircraft-icon', iconSize: [size, size], iconAnchor: [size/2, size/2] });
+        function createAircraftIcon(color = '#ff3300', size = 50, rotation = 0) {
+            // Enforce minimum size of 50x50 pixels
+            const finalSize = Math.max(size, 50);
+
+            // Use new detailed aircraft SVG icon
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${finalSize}" height="${finalSize}" viewBox="0 0 36 36">
+                <defs>
+                    <linearGradient id="aircraftBodyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:${color};stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:${color};stop-opacity:0.9" />
+                        <stop offset="100%" style="stop-color:${color};stop-opacity:0.7" />
+                    </linearGradient>
+                    <linearGradient id="wingGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#f0f0f0;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#cccccc;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+
+                <!-- Main fuselage/body -->
+                <ellipse cx="18" cy="18" rx="4.5" ry="14" fill="url(#aircraftBodyGradient)" stroke="#ffffff" stroke-width="0.8"/>
+
+                <!-- Wings (main) -->
+                <rect x="6" y="16.5" width="24" height="3" rx="1" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.5"/>
+                <rect x="7" y="17" width="22" height="2" rx="0.5" fill="${color}" opacity="0.9"/>
+
+                <!-- Tail section -->
+                <rect x="16" y="4" width="4" height="8" rx="0.5" fill="url(#aircraftBodyGradient)" stroke="#ffffff" stroke-width="0.5"/>
+                <rect x="16.5" y="4.5" width="3" height="7" rx="0.3" fill="${color}" opacity="0.8"/>
+
+                <!-- Vertical stabilizer -->
+                <rect x="17.2" y="2" width="1.6" height="6" rx="0.2" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.3"/>
+                <rect x="17.4" y="2.2" width="1.2" height="5.6" rx="0.1" fill="${color}" opacity="0.9"/>
+
+                <!-- Horizontal stabilizers -->
+                <rect x="14" y="5" width="8" height="2" rx="0.3" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.3"/>
+                <rect x="14.5" y="5.2" width="7" height="1.6" rx="0.2" fill="${color}" opacity="0.8"/>
+
+                <!-- Engines (turbofan style) -->
+                <circle cx="9" cy="18" r="2" fill="#333333" stroke="#ffffff" stroke-width="0.3"/>
+                <circle cx="9" cy="18" r="1.2" fill="#666666"/>
+                <circle cx="27" cy="18" r="2" fill="#333333" stroke="#ffffff" stroke-width="0.3"/>
+                <circle cx="27" cy="18" r="1.2" fill="#666666"/>
+
+                <!-- Cockpit windows -->
+                <rect x="16" y="7" width="4" height="3" rx="2" fill="#87ceeb" opacity="0.8" stroke="#ffffff" stroke-width="0.2"/>
+                <rect x="16.5" y="7.5" width="3" height="2" rx="1.5" fill="#4682b4" opacity="0.6"/>
+
+                <!-- Wing flaps/ailerons (subtle) -->
+                <rect x="8" y="19.5" width="4" height="1" rx="0.2" fill="#666666" opacity="0.7"/>
+                <rect x="24" y="19.5" width="4" height="1" rx="0.2" fill="#666666" opacity="0.7"/>
+
+                <!-- Landing gear doors (subtle) -->
+                <rect x="12" y="30" width="2" height="1.5" rx="0.3" fill="#666666" opacity="0.5"/>
+                <rect x="22" y="30" width="2" height="1.5" rx="0.3" fill="#666666" opacity="0.5"/>
+            </svg>`;
+
+            const html = `<div style="transform: rotate(${rotation}deg); width: ${finalSize}px; height:${finalSize}px; display:flex; align-items:center; justify-content:center">${svg}</div>`;
+            return L.divIcon({
+                html,
+                className: 'aircraft-icon',
+                iconSize: [finalSize, finalSize],
+                iconAnchor: [finalSize/2, finalSize/2]
+            });
         }
 
-        // Compute icon rotation so the nose points 180 degrees from track
+        // Compute icon rotation so the nose points along the track
         function iconRotationFromTrack(track) {
             const t = (typeof track === 'number' && !isNaN(track)) ? Number(track) : 0;
-            return (t + 180) % 360;
+            return t;
+        }
+
+        // Aircraft icon mappings from dump1090-fa
+        const TypeDesignatorIcons = {
+            'A10': 'hi_perf', 'A148': 'hi_perf', 'A225': 'heavy_4e', 'A3': 'hi_perf', 'A37': 'jet_nonswept',
+            'A5': 'cessna', 'A6': 'hi_perf', 'A700': 'jet_nonswept', 'AC80': 'twin_small', 'AC90': 'twin_small',
+            'AC95': 'twin_small', 'AJ27': 'jet_nonswept', 'AJET': 'hi_perf', 'AN28': 'twin_small', 'ARCE': 'hi_perf',
+            'AT3': 'hi_perf', 'ATG1': 'jet_nonswept', 'B18T': 'twin_small', 'B190': 'twin_small', 'B25': 'twin_large',
+            'B350': 'twin_small', 'B52': 'heavy_4e', 'B712': 'jet_swept', 'B721': 'airliner', 'B722': 'airliner',
+            'BALL': 'balloon', 'BE10': 'twin_small', 'BE20': 'twin_small', 'BE30': 'twin_small', 'BE32': 'twin_small',
+            'BE40': 'jet_nonswept', 'BE99': 'twin_small', 'BE9L': 'twin_small', 'BE9T': 'twin_small', 'BN2T': 'twin_small',
+            'BPOD': 'jet_swept', 'BU20': 'twin_small', 'C08T': 'jet_swept', 'C125': 'twin_small', 'C212': 'twin_small',
+            'C21T': 'twin_small', 'C22J': 'jet_nonswept', 'C25A': 'jet_nonswept', 'C25B': 'jet_nonswept', 'C25C': 'jet_nonswept',
+            'C25D': 'jet_nonswept', 'C441': 'jet_swept', 'C500': 'jet_nonswept', 'C501': 'jet_nonswept', 'C510': 'jet_nonswept',
+            'C525': 'jet_nonswept', 'C550': 'jet_nonswept', 'C560': 'jet_nonswept', 'C56X': 'jet_nonswept', 'C650': 'jet_swept',
+            'C680': 'jet_swept', 'C750': 'jet_swept', 'CL30': 'jet_swept', 'CL35': 'jet_swept', 'CL60': 'jet_swept',
+            'CL85': 'jet_swept', 'CN35': 'jet_swept', 'CRJ1': 'jet_swept', 'CRJ2': 'jet_swept', 'CRJ7': 'jet_swept',
+            'CRJ9': 'jet_swept', 'CRJX': 'jet_swept', 'CVLP': 'twin_large', 'D228': 'twin_small', 'DA36': 'hi_perf',
+            'DA50': 'airliner', 'DC10': 'heavy_2e', 'DC3': 'twin_large', 'DC3S': 'twin_large', 'DHA3': 'twin_small',
+            'DHC6': 'twin_small', 'DLH2': 'hi_perf', 'E110': 'twin_small', 'E135': 'jet_swept', 'E145': 'jet_swept',
+            'E29E': 'hi_perf', 'E45X': 'jet_swept', 'E500': 'jet_nonswept', 'E50P': 'jet_nonswept', 'E545': 'jet_swept',
+            'E55P': 'jet_nonswept', 'EA50': 'jet_nonswept', 'EFAN': 'jet_nonswept', 'EFUS': 'hi_perf', 'ELIT': 'jet_nonswept',
+            'EUFI': 'hi_perf', 'F1': 'hi_perf', 'F100': 'jet_swept', 'F111': 'hi_perf', 'F117': 'hi_perf', 'F14': 'hi_perf',
+            'F15': 'hi_perf', 'F22': 'hi_perf', 'F2TH': 'jet_swept', 'F4': 'hi_perf', 'F406': 'twin_small', 'F5': 'hi_perf',
+            'F50': 'twin_large', 'F70': 'twin_large', 'FA10': 'hi_perf', 'FA20': 'hi_perf', 'FA50': 'hi_perf', 'FA7X': 'hi_perf',
+            'FJET': 'jet_nonswept', 'G115': 'twin_small', 'G120': 'twin_small', 'G150': 'jet_nonswept', 'G159': 'jet_nonswept',
+            'G200': 'jet_nonswept', 'G280': 'jet_nonswept', 'G3': 'jet_nonswept', 'G4': 'jet_nonswept', 'G450': 'jet_nonswept',
+            'G5': 'jet_nonswept', 'G550': 'jet_nonswept', 'G650': 'jet_swept', 'GALX': 'jet_swept', 'GL5T': 'jet_swept',
+            'GLF2': 'jet_nonswept', 'GLF3': 'jet_nonswept', 'GLF4': 'jet_nonswept', 'GLF5': 'jet_nonswept', 'GLF6': 'jet_swept',
+            'H25A': 'jet_swept', 'H25B': 'jet_swept', 'H25C': 'jet_swept', 'HA4T': 'airliner', 'HDJT': 'jet_nonswept',
+            'HERN': 'jet_swept', 'J8A': 'hi_perf', 'J8B': 'hi_perf', 'JH7': 'hi_perf', 'JS31': 'twin_small', 'JS32': 'twin_small',
+            'JU52': 'twin_small', 'L101': 'heavy_2e', 'LAE1': 'hi_perf', 'LEOP': 'jet_nonswept', 'LJ23': 'jet_nonswept',
+            'LJ24': 'jet_nonswept', 'LJ25': 'jet_nonswept', 'LJ28': 'jet_nonswept', 'LJ31': 'jet_nonswept', 'LJ35': 'jet_nonswept',
+            'LJ45': 'jet_nonswept', 'LJ55': 'jet_nonswept', 'LJ60': 'jet_nonswept', 'LJ75': 'jet_swept', 'LJ85': 'jet_swept',
+            'M20P': 'twin_small', 'M7': 'hi_perf', 'MD11': 'heavy_2e', 'MD81': 'airliner', 'MD82': 'airliner', 'MD83': 'airliner',
+            'MD87': 'airliner', 'MD88': 'airliner', 'MD90': 'airliner', 'MU2': 'twin_small', 'MU30': 'twin_small', 'N262': 'twin_small',
+            'P180': 'twin_small', 'P28A': 'cessna', 'P28B': 'cessna', 'P28R': 'cessna', 'P28S': 'cessna', 'P28T': 'cessna',
+            'P28U': 'cessna', 'P32R': 'cessna', 'P32T': 'cessna', 'P46T': 'twin_small', 'PA23': 'twin_small', 'PA24': 'twin_small',
+            'PA25': 'twin_small', 'PA27': 'twin_small', 'PA30': 'twin_small', 'PA31': 'twin_small', 'PA32': 'twin_small',
+            'PA34': 'twin_small', 'PA44': 'twin_small', 'PA46': 'twin_small', 'PC12': 'twin_small', 'PC6T': 'twin_small',
+            'PC9': 'twin_small', 'PRM1': 'jet_nonswept', 'R22': 'helicopter', 'R44': 'helicopter', 'RJ1H': 'jet_swept',
+            'RJ70': 'jet_swept', 'RJ85': 'jet_swept', 'RJ100': 'jet_swept', 'S3': 'hi_perf', 'S37': 'jet_nonswept',
+            'S601': 'jet_nonswept', 'SATA': 'jet_nonswept', 'SB05': 'jet_nonswept', 'SC7': 'twin_small', 'SF50': 'jet_nonswept',
+            'SJ30': 'jet_nonswept', 'SLCH': 'heavy_4e', 'SM60': 'twin_small', 'SOL1': 'jet_swept', 'SOL2': 'jet_swept',
+            'SP33': 'jet_nonswept', 'SR71': 'hi_perf', 'SS2': 'hi_perf', 'SU15': 'hi_perf', 'SU24': 'hi_perf', 'SU25': 'hi_perf',
+            'SU27': 'hi_perf', 'SW2': 'twin_small', 'SW3': 'twin_small', 'SW4': 'twin_small', 'T154': 'airliner', 'T2': 'jet_nonswept',
+            'T22M': 'hi_perf', 'T37': 'jet_nonswept', 'T38': 'jet_nonswept', 'T4': 'hi_perf', 'TJET': 'jet_nonswept', 'TOR': 'hi_perf',
+            'TRIM': 'twin_small', 'TRIS': 'twin_small', 'TRMA': 'twin_small', 'TU22': 'hi_perf', 'VAUT': 'hi_perf', 'Y130': 'hi_perf',
+            'Y141': 'airliner', 'YK28': 'hi_perf', 'YK38': 'airliner', 'YK40': 'airliner', 'YK42': 'airliner', 'YURO': 'hi_perf'
+        };
+
+        const TypeDescriptionIcons = {
+            'H': 'helicopter',
+            'L1P': 'cessna', 'L1T': 'cessna', 'L1J': 'hi_perf',
+            'L2P': 'twin_small', 'L2T': 'twin_large',
+            'L2J-L': 'jet_swept', 'L2J-M': 'airliner', 'L2J-H': 'heavy_2e',
+            'L3J-L': 'jet_swept', 'L3J-M': 'airliner', 'L3J-H': 'heavy_2e',
+            'L4J-L': 'jet_swept', 'L4J-M': 'airliner', 'L4J-H': 'heavy_4e',
+            'L2J-M': 'airliner', 'L2J-H': 'heavy_2e',
+            'L4T': 'heavy_4e', 'L4J-H': 'heavy_4e'
+        };
+
+        const CategoryIcons = {
+            'A1': 'cessna', 'A2': 'jet_nonswept', 'A3': 'airliner', 'A4': 'heavy_2e', 'A5': 'heavy_4e', 'A6': 'hi_perf', 'A7': 'helicopter',
+            'B1': 'cessna', 'B2': 'balloon', 'B4': 'cessna', 'B7': 'hi_perf',
+            'C0': 'ground_unknown', 'C1': 'ground_emergency', 'C2': 'ground_service', 'C3': 'ground_fixed', 'C4': 'ground_fixed', 'C5': 'ground_fixed', 'C6': 'ground_unknown', 'C7': 'ground_unknown'
+        };
+
+        // Function to get icon name for aircraft
+        function getIconForAircraft(info) {
+            return 'aircraft'; // Use the generic aircraft icon for all
         }
 
         // Create an aircraft logo icon (image) using known aircraft info.
         // `info` may contain `manufacturerLogo` (relative URL) or `manufacturer`/`aircraft_model`.
-        function createAircraftLogoIcon(info = {}, rotation = 0, size = 28) {
+        function createAircraftLogoIcon(info = {}, rotation = 0, size = 50) {
+            // Enforce minimum size of 50x50 pixels
+            const finalSize = Math.max(size, 50);
+
             // Determine image source
             let src = null;
             try {
                 if (info.manufacturerLogo && typeof info.manufacturerLogo === 'string') src = info.manufacturerLogo;
-                else if (info.manufacturer && typeof info.manufacturer === 'string') src = `/api/v2logos/${encodeURIComponent(info.manufacturer)}`;
+                else if (info.manufacturer && typeof info.manufacturer === 'string') {
+                    // Try to map airline name to code for logo lookup
+                    const airlineCode = airlineNameToCode.get(info.manufacturer.toLowerCase());
+                    if (airlineCode) {
+                        src = `/api/v2logos/${encodeURIComponent(airlineCode)}`;
+                    } else {
+                        // Fallback to using the name directly (for manufacturer logos)
+                        src = `/api/v2logos/${encodeURIComponent(info.manufacturer)}`;
+                    }
+                }
                 else if (info.aircraft_model && typeof info.aircraft_model === 'string') src = `/api/v2logos/${encodeURIComponent(info.aircraft_model.split(' ')[0]||'')}`;
+                else {
+                    // Use local piaware icons based on aircraft type
+                    const icon = getIconForAircraft(info);
+                    src = `/api/piaware-icons/${icon}`;
+                }
             } catch (e) {}
-            // Fallback to a small SVG if no image available
-            const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${size}px;height:${size}px;object-fit:contain;display:block;border-radius:2px;"/>` : `
-                <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M21 11.5c0-.28-.22-.5-.5-.5h-6.79L12 4.21 10.29 5.92 11.5 7.12 8.75 9.88 7.34 9.5c-.14-.03-.28-.02-.41.04L4 10.5c-.44.14-.75.55-.75 1v1c0 .45.31.86.75 1l2.93.84c.13.04.27.06.41.04l1.41-.38L11.5 16.9 10.29 18.1 12 19.79l1.71-1.71H21.5c.28 0 .5-.22.5-.5v-5.08z" fill="#ff3300"/></svg>`;
-            const html = `<div style="transform: rotate(${rotation}deg); width: ${size}px; height:${size}px; display:flex; align-items:center; justify-content:center">${imgHtml}</div>`;
-            return L.divIcon({ html, className: 'aircraft-logo-icon', iconSize: [size, size], iconAnchor: [size/2, size/2] });
+            // Fallback to simple aircraft SVG from piaware/dump1090-fa style
+            const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${finalSize}px;height:${finalSize}px;object-fit:contain;display:block;border-radius:3px;border:1px solid rgba(255,255,255,0.3);"/>` : `<svg xmlns="http://www.w3.org/2000/svg" width="${finalSize}" height="${finalSize}" viewBox="0 0 36 36">
+                <defs>
+                    <style>.cls-1{fill:#ff3300;}.cls-2{fill:#ffffff;}</style>
+                </defs>
+                <g>
+                    <path class="cls-1" d="M18,4l2,4h8l-6,4,2,6-6-4-6,4,2-6-6-4h8Z"/>
+                    <path class="cls-2" d="M18,5l1.5,3h6l-4.5,3,1.5,4.5-4.5-3-4.5,3,1.5-4.5-4.5-3h6Z" opacity="0.3"/>
+                </g>
+            </svg>`;
+            const html = `<div style="transform: rotate(${rotation}deg); width: ${finalSize}px; height:${finalSize}px; display:flex; align-items:center; justify-content:center">${imgHtml}</div>`;
+            return L.divIcon({ html, className: 'aircraft-logo-icon', iconSize: [finalSize, finalSize], iconAnchor: [finalSize/2, finalSize/2] });
         }
 
         // Add minimal CSS for aircraft icons
         const style = document.createElement('style');
-        style.innerHTML = `.aircraft-icon svg { display:block; } .aircraft-icon { pointer-events: auto; } .aircraft-logo-icon img { display:block; } .aircraft-logo-icon { pointer-events:auto; }`;
+        style.innerHTML = `
+            .aircraft-icon svg {
+                display:block;
+                filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+            }
+            .aircraft-icon {
+                pointer-events: auto;
+                border-radius: 4px;
+                transition: transform 0.2s ease;
+            }
+            .aircraft-icon:hover {
+                transform: scale(1.1);
+            }
+            .aircraft-logo-icon img {
+                display:block;
+                filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+            }
+            .aircraft-logo-icon {
+                pointer-events:auto;
+                border-radius: 4px;
+                transition: transform 0.2s ease;
+            }
+            .aircraft-logo-icon:hover {
+                transform: scale(1.1);
+            }
+        `;
         document.head.appendChild(style);
         function clearLiveLayer() {
             if (liveLayer) {
@@ -1830,7 +2051,19 @@
                     }
 
                     // Otherwise create new marker and add to layer
-                    const icon = createAircraftIcon('#ff3300', 20, rot || 0);
+                    // Try to use logo icon if manufacturer info is available, otherwise use SVG icon
+                    let icon;
+                    try {
+                        const aircraftInfo = p.manufacturer || p.airline || null;
+                        if (aircraftInfo) {
+                            icon = createAircraftLogoIcon({ manufacturer: aircraftInfo }, rot || 0, 50);
+                        } else {
+                            icon = createAircraftIcon('#ff3300', 50, rot || 0);
+                        }
+                    } catch (e) {
+                        // Fallback to SVG icon if logo creation fails
+                        icon = createAircraftIcon('#ff3300', 50, rot || 0);
+                    }
                     const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
 
                     // Tooltip shown on hover (richer HTML)
@@ -1891,20 +2124,16 @@
                                     try {
                                         const { points, cached } = await fetchTrackWithCache(hex, minutes);
                                         if (points.length > 0) {
-                                                    // compute color based on altitude change if available
-                                                    let color = '#00ffff';
+                                                    // compute color based on altitude change if available: green for climb, red for descent, yellow for static
+                                                    let color = 'yellow'; // Default to yellow for static/level flight
                                                     const firstAlt = points[0] && typeof points[0].alt === 'number' ? points[0].alt : null;
                                                     const lastAlt = points[points.length - 1] && typeof points[points.length - 1].alt === 'number' ? points[points.length - 1].alt : null;
-                                                    let hasClimbDesc = false;
                                                     if (firstAlt !== null && lastAlt !== null) {
                                                         const delta = lastAlt - firstAlt;
                                                         const thresh = 50;
-                                                        if (delta > thresh) { color = 'green'; hasClimbDesc = true; }
-                                                        else if (delta < -thresh) { color = 'red'; hasClimbDesc = true; }
-                                                    }
-                                                    // If no climb/descent, highlight sharp angular changes in yellow
-                                                    if (!hasClimbDesc) {
-                                                        try { const ang = maxTrackAngularChange(points); if (ang > 5) color = 'yellow'; } catch (e) {}
+                                                        if (delta > thresh) { color = 'green'; } // Climbing
+                                                        else if (delta < -thresh) { color = 'red'; } // Descending
+                                                        // else remains yellow for static/level flight
                                                     }
                                                     const latlngs = densifyTrackPoints(points, 0.1);
                                                     const poly = L.polyline(latlngs, { color: color, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
@@ -2023,15 +2252,16 @@
                                 const { points } = await fetchTrackWithCache(hex, minutes);
                                 if (points.length > 0) {
                                     const lg = L.layerGroup();
-                                    // color persist polyline by climb/descent if altitude available
-                                    let color = '#ffaa00';
+                                    // color persist polyline by climb/descent if altitude available: green for climb, red for descent, yellow for static
+                                    let color = 'yellow'; // Default to yellow for static/level flight
                                     const firstAlt = points[0] && typeof points[0].alt === 'number' ? points[0].alt : null;
                                     const lastAlt = points[points.length - 1] && typeof points[points.length - 1].alt === 'number' ? points[points.length - 1].alt : null;
                                     if (firstAlt !== null && lastAlt !== null) {
                                         const delta = lastAlt - firstAlt;
                                         const thresh = 50;
-                                        if (delta > thresh) color = 'green';
-                                        else if (delta < -thresh) color = 'red';
+                                        if (delta > thresh) color = 'green'; // Climbing
+                                        else if (delta < -thresh) color = 'red'; // Descending
+                                        // else remains yellow for static/level flight
                                     }
                                     const latlngs = densifyTrackPoints(points, 0.1);
                                     const poly = L.polyline(latlngs, { color: color, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
@@ -2486,6 +2716,8 @@
 
         // Load initial data
         loadGridData();
+        // Load airline mapping for logo lookup
+        loadAirlineMapping();
     </script>
 </body>
 </html>
