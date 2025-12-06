@@ -17,6 +17,7 @@ node_modules/
 !aircraft_tracker.py
 !tools/aircraft_heatmap.py
 !tools/combine_heatmaps.py
+!start_servers.py
 scripts/
 lib/*.s
 dashboard-state.json
