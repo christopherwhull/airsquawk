@@ -149,9 +149,17 @@ npm install
    - See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options
 
 4. Start the server:
+
+**Option 1: Using npm (single terminal)**
 ```bash
 npm start
 ```
+
+**Option 2: Using Python script (separate windows)**
+```bash
+python start_servers.py
+```
+This starts both the API server (port 3002) and tile proxy server (port 3004) in separate console windows for better log visibility.
 
 5. Access the dashboard:
 ```
