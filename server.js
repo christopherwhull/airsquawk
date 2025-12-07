@@ -1569,6 +1569,79 @@ async function initialize() {
     // Use BUCKET_NAME for read-only (historical) endpoints, WRITE_BUCKET_NAME for write endpoints
     setupApiRoutes(app, s3, BUCKET_NAME, WRITE_BUCKET_NAME, getInMemoryState, globalCache, positionCache); // Pass positionCache for fast position lookups
 
+    // --- Startup: Compare minute vs hourly file position counts in write bucket ---
+    if (process.env.NODE_ENV !== 'test') {
+        (async () => {
+            try {
+                const minuteFiles = await listS3Files(s3, WRITE_BUCKET_NAME, 'data/piaware_aircraft_log');
+                const hourlyFiles = await listS3Files(s3, WRITE_BUCKET_NAME, 'data/hourly/positions_');
+                let minuteCount = 0, hourlyCount = 0;
+                for (const file of minuteFiles) {
+                    try {
+                        const data = await downloadAndParseS3File(s3, WRITE_BUCKET_NAME, file.Key);
+                        if (Array.isArray(data)) minuteCount += data.length;
+                        else if (data) minuteCount++;
+                    } catch {}
+                }
+                for (const file of hourlyFiles) {
+                    try {
+                        const data = await downloadAndParseS3File(s3, WRITE_BUCKET_NAME, file.Key);
+                        if (Array.isArray(data)) hourlyCount += data.length;
+                        else if (data) hourlyCount++;
+                    } catch {}
+                }
+                const logMsg = `[startup] Write bucket: Minute files ${minuteFiles.length} files, ${minuteCount} positions | Hourly files ${hourlyFiles.length} files, ${hourlyCount} positions`;
+                console.log(logMsg);
+                fs.appendFileSync('startup-bucket-compare.log', logMsg + '\n');
+            } catch (err) {
+                console.warn('[startup] Error comparing minute/hourly file positions:', err.message);
+            }
+        })();
+    }
+
+    // --- Startup: Compare read/write bucket position counts ---
+    if (process.env.NODE_ENV !== 'test') {
+        (async () => {
+            try {
+                const readFiles = await listS3Files(s3, BUCKET_NAME, 'data/piaware_aircraft_log');
+                const writeFiles = await listS3Files(s3, WRITE_BUCKET_NAME, 'data/piaware_aircraft_log');
+                let readCount = 0, writeCount = 0;
+                for (const file of readFiles) {
+                    try {
+                        const data = await downloadAndParseS3File(s3, BUCKET_NAME, file.Key);
+                        if (Array.isArray(data)) readCount += data.length;
+                        else if (data) readCount++;
+                    } catch {}
+                }
+                for (const file of writeFiles) {
+                    try {
+                        const data = await downloadAndParseS3File(s3, WRITE_BUCKET_NAME, file.Key);
+                        if (Array.isArray(data)) writeCount += data.length;
+                        else if (data) writeCount++;
+                    } catch {}
+                }
+                const logMsg = `[startup] Read bucket: ${readFiles.length} files, ${readCount} positions | Write bucket: ${writeFiles.length} files, ${writeCount} positions`;
+                console.log(logMsg);
+                fs.appendFileSync('startup-bucket-compare.log', logMsg + '\n');
+            } catch (err) {
+                console.warn('[startup] Error comparing read/write bucket positions:', err.message);
+            }
+        })();
+    }
+
+    // --- Startup: Compare read/write bucket file counts ---
+    if (process.env.NODE_ENV !== 'test') {
+        (async () => {
+            try {
+                const readFiles = await listS3Files(s3, BUCKET_NAME, 'data/piaware_aircraft_log');
+                const writeFiles = await listS3Files(s3, WRITE_BUCKET_NAME, 'data/piaware_aircraft_log');
+                console.log(`[startup] Read bucket: ${readFiles.length} files, Write bucket: ${writeFiles.length} files`);
+            } catch (err) {
+                console.warn('[startup] Error comparing read/write bucket files:', err.message);
+            }
+        })();
+    }
+
     // Background jobs to compute heavy aggregations and populate globalCache
     let aggRunning = { airlines: false, squawk: false, historical: false };
 

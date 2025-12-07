@@ -2741,6 +2741,7 @@ async function remakeHourlyRollup() {
 // --- Heatmap Filtering Functionality ---
 async function loadHeatmap() {
     const canvas = document.getElementById('heatmap-canvas');
+    if (!canvas) return; // Don't run on pages without heatmap canvas
     const ctx = canvas.getContext('2d');
     const positionsElem = document.getElementById('heatmap-total-positions');
     

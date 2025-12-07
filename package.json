@@ -28,6 +28,7 @@
     "test:all": "node tools/test-all.js",
     "test:clean-slate": "node tools/test-clean-slate.js",
     "test:leaflet": "node tools/leaflet-test.js",
+    "test:leaflet:full": "node tools/leaflet-test.js \"http://localhost:3002/heatmap-leaflet.html\" screenshots/testplan/leaflet-test-full --select-overlays --collect-popups --ignore-console=mesonet.agron.iastate.edu/cache/tile.py/.*sfc_analysis/.* --ignore-console=http://localhost:3002/api/v2logos/.* --run-id=full",
     "validate-config": "node validate-config.js",
     "create-buckets": "node tools/create-bucket.js",
     "backup-buckets": "node tools/backup-buckets.js backup",

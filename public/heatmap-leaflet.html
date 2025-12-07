@@ -739,6 +739,8 @@
         let liveIntervalId = null;
         // Map of current live markers for smooth updates (hex -> L.marker)
         const liveMarkers = new Map();
+        // Expose for tests and debugging: attach to window so external harnesses can access
+        try { window.liveMarkers = liveMarkers; } catch (e) {}
         // Map of last seen squawk per hex (hex -> '1234' or null)
         const lastSquawk = new Map();
         // Map of short trail polylines showing recent positions (hex -> L.Polyline)
@@ -812,17 +814,21 @@
 
         // Live tracks layer: short recent tracks for currently active flights
         let liveTracksLayer = L.layerGroup();
+        try { window.liveTracksLayer = liveTracksLayer; } catch (e) {}
         let liveTracksIntervalId = null;
         const LIVE_TRACKS_POLL_MS = 7000; // refresh live tracks every 7s
 
         // Persistent tracks shown when user clicks with "Persist track on click" enabled
         const persistentTracksLayer = L.layerGroup();
         const persistentTracks = new Map(); // hex -> LayerGroup
+        try { window.persistentTracksLayer = persistentTracksLayer; window.persistentTracks = persistentTracks; } catch (e) {}
         // Temporary on-click tracks (shown when persist-on-click is NOT enabled)
         const tempPersistentLayer = L.layerGroup();
+        try { window.tempPersistentLayer = tempPersistentLayer; } catch (e) {}
         const TEMP_PERSIST_MS = 20 * 1000; // 20 seconds for temporary click tracks
         // Long tracks layer (drawn from /api/track for visible hexes)
         let longTracksLayer = L.layerGroup();
+        try { window.longTracksLayer = longTracksLayer; } catch (e) {}
         let longTracksIntervalId = null;
         const LONG_TRACKS_POLL_MS = 15000; // fetch long tracks every 15s
         const LONG_TRACKS_BATCH_SIZE = 8; // chunk size for parallel requests

@@ -46,6 +46,7 @@ Why it matters:
 - **`config.js`** - Centralized configuration file
 - **`api-routes.js`** - API endpoint definitions
 - **`tools/`** - Utility scripts for data analysis, testing, and maintenance (see `tools/README.md`)
+ - **`docs/leaflet-test-plan.md`** - The Leaflet heatmap Puppeteer test plan and artifacts documentation (see `docs/leaflet-test-plan.md`)
 - **`logo-tools/`** - Logo management and download utilities
 - **`public/`** - Static web assets (HTML, CSS, JavaScript)
 - **`runtime/`** - Generated files and logs (created at runtime)

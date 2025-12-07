@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIRSQUWK Dashboard - TEST VERSION</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header style="text-align: center; margin-bottom: 20px;">
+        <img src="/media/airsquak.jpg" alt="AirSquawk Logo" style="max-width: 300px; height: auto;">
+        <h1>AirSquawk <span style="color: #ff6b6b; font-size: 0.7em; font-weight: normal;">[TEST]</span></h1>
+    </header>
+    <button id="restart-btn" class="restart-button" onclick="restartServer()">🔄 Restart Server</button>
+    <div id="connection-status" class="status-disconnected">● Disconnected</div>
+
+    <div class="tabs">
+        <button class="tab-button active" onclick="showTab('live', event)">Live</button>
+        <button class="tab-button" onclick="showTab('airlines', event)">Airlines</button>
+        <button class="tab-button" onclick="showTab('flights', event)">Flights</button>
+        <button class="tab-button" onclick="showTab('positions', event)">Positions</button>
+        <button class="tab-button" onclick="showTab('squawk', event)">Squawk</button>
+        <button class="tab-button" onclick="showTab('heatmap', event)">Heatmap</button>
+        <button class="tab-button" onclick="showTab('reception', event)">Reception</button>
+        <button class="tab-button" onclick="showTab('cache', event)">Cache Status</button>
+    </div>
+    <!--
+    TAB INVENTORY:
+    1. live-tab: Live aircraft tracking with real-time position updates
+    2. airlines-tab: Airline statistics and flight data analysis
+    3. flights-tab: Flight tracking and historical flight data
+    4. positions-tab: Position statistics and time-series analysis
+    5. squawk-tab: Squawk code transition analysis
+    6. heatmap-tab: Aircraft position heatmap viewer (links to Leaflet)
+    7. reception-tab: Reception range analysis (bearing/altitude plots)
+    8. cache-tab: Heatmap cache status and management
+    -->
+    <script>
+    // Remove conflicting tab activation on DOMContentLoaded
+    // Only rely on showTab for tab switching
+    // window.addEventListener('DOMContentLoaded', function() {
+    //     document.querySelectorAll('.tab-content').forEach(function(content, idx) {
+    //         if (idx === 0) {
+    //             content.classList.add('active');
+    //         } else {
+    //             content.classList.remove('active');
+    //         }
+    //     });
+    // });
+    // Instead, activate the first tab on load using showTab
+    window.addEventListener('DOMContentLoaded', function() {
+        showTab('live');
+    });
+    </script>
+
+    <div id="reception-tab" class="tab-content">
+        <h2>Reception Range</h2>
+        <div id="reception-receiver-info" style="margin-bottom:15px;padding:10px;background:#1e1e1e;border-radius:4px;border:1px solid #333;color:#e0e0e0;"><strong style="color:#fff;">Receiver Position:</strong> <span id="receiver-coords" style="color:#42a5f5;">Loading...</span></div>
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadReceptionRange(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
+                <button onclick="loadReceptionRange(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
+                <button onclick="loadReceptionRange(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
+                <button onclick="loadReceptionRange(168)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">7 Days</button>
+                <button onclick="loadReceptionRange(744)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">31 Days</button>
+            </div>
+            <label for="reception-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
+            <input type="datetime-local" id="reception-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label for="reception-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
+            <input type="datetime-local" id="reception-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <button onclick="loadReceptionRange()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+        </div>
+        <div id="reception-summary" style="margin-top:10px;margin-bottom:10px;color:#e0e0e0;"></div>
+        <div style="display:flex;gap:20px;margin-bottom:20px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:400px;">
+                <h3 style="color:#e0e0e0;">Reception Range by Bearing (All Altitudes)</h3>
+                <canvas id="reception-bearing-canvas" width="400" height="400" style="border:1px solid #555;background:#1e1e1e;"></canvas>
+            </div>
+            <div style="flex:1;min-width:400px;">
+                <h3 style="color:#e0e0e0;">Reception Range by Altitude (All Bearings)</h3>
+                <canvas id="reception-altitude-canvas" width="400" height="400" style="border:1px solid #555;background:#1e1e1e;"></canvas>
+            </div>
+        </div>
+        <div style="margin-bottom:20px;">
+            <h3 style="color:#e0e0e0;">3D Reception Range (Bearing × Altitude × Range)</h3>
+            <div id="reception-3d-plot" style="width:100%;height:500px;border:1px solid #555;background:#1e1e1e;"></div>
+        </div>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    </div>
+
+    <div id="live-tab" class="tab-content active">
+        <h2>Live Statistics</h2>
+        <div id="live-stats">
+            <div>Tracking: <span id="tracking-count">0</span></div>
+            <div>Positions Used: <span id="position-total">0</span></div>
+            <div>Server Uptime: <span id="runtime">0:00</span></div>
+            <div>Max RSSI: <span id="max-rssi">N/A</span></div>
+            <div>Min RSSI: <span id="min-rssi">N/A</span></div>
+            <div>Max Range: <span id="max-range">N/A</span> nm</div>
+            <div>Min Range: <span id="min-range">N/A</span> nm</div>
+        </div>
+        <h2>Live Aircraft</h2>
+        <table id="aircraft-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="icao">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="airline">Airline</th>
+                    <th>Airline Logo</th>
+                    <th data-sort="reg">Reg</th>
+                        <th data-sort="type">Type</th>
+                        <th data-sort="manufacturer">Manufacturer</th>
+                        <th>Manufacturer Logo</th>
+                        <th data-sort="bodytype">Body Type</th>
+                    <th data-sort="squawk">Squawk</th>
+                    <th data-sort="alt" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="speed" data-sort-numeric="true">Speed (kt)</th>
+                    <th data-sort="vert_rate" data-sort-numeric="true">Vert Rate (ft/min)</th>
+                    <th data-sort="lat" data-sort-numeric="true">Lat</th>
+                    <th data-sort="lon" data-sort-numeric="true">Lon</th>
+                    <th data-sort="messages" data-sort-numeric="true">Messages</th>
+                    <th data-sort="rssi" data-sort-numeric="true">RSSI</th>
+                    <th data-sort="slant_start" data-sort-numeric="true">Slant Range (nm)</th>
+                </tr>
+            </thead>
+            <tbody id="aircraft-table-body"></tbody>
+        </table>
+    </div>
+
+    <div id="airlines-tab" class="tab-content">
+        <h2>Airline Statistics</h2>
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadAirlineStats(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
+                <button onclick="loadAirlineStats(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
+                <button onclick="loadAirlineStats(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
+            </div>
+            <label for="airline-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
+            <input type="datetime-local" id="airline-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label for="airline-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
+            <input type="datetime-local" id="airline-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <button onclick="loadAirlineStats()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+        </div>
+        <div id="airline-stats-summary-last-hour"></div>
+        <table id="airline-stats-table-last-hour" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="code">Code</th>
+                    <th>Logo</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="flights" data-sort-numeric="true">Flights</th>
+                    <th data-sort="aircraft" data-sort-numeric="true">Unique Aircraft</th>
+                    <th data-sort="lastSeen" data-sort-numeric="true">Last Seen</th>
+                    <th data-sort="topManufacturer">Manufacturers</th>
+                    <th>Top Manufacturer Logo</th>
+                </tr>
+            </thead>
+            <tbody id="airline-stats-table-body-last-hour"></tbody>
+        </table>
+        
+        <div id="airline-flights-drilldown" style="display: none; margin-top: 30px; padding: 20px; background: #1e1e1e; border-radius: 8px; border: 2px solid #42a5f5;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 id="airline-flights-title" style="color: #42a5f5; margin: 0;">Flights</h3>
+                <button onclick="closeAirlineFlightsDrilldown()" style="padding: 5px 15px; background: #666; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Close</button>
+            </div>
+            <div id="airline-flights-summary" style="margin-bottom: 15px; color: #e0e0e0;"></div>
+            <table id="airline-flights-table" class="sortable" style="width: 100%;">
+                <thead>
+                    <tr style="background: #2a2a2a; color: #e0e0e0;">
+                        <th data-sort="callsign">Flight</th>
+                        <th data-sort="airline-code">ICAO Code</th>
+                        <th data-sort="registration">Registration</th>
+                            <th data-sort="type">Type</th>
+                            <th data-sort="manufacturer">Manufacturer</th>
+                            <th>Manufacturer Logo</th>
+                            <th data-sort="bodytype">Body Type</th>
+                        <th data-sort="start_time" data-sort-numeric="true">Start</th>
+                        <th data-sort="end_time" data-sort-numeric="true">End</th>
+                        <th data-sort="duration" data-sort-numeric="true">Duration</th>
+                        <th data-sort="status">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="airline-flights-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="positions-tab" class="tab-content">
+        <h2>Position Statistics</h2>
+        
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadUnifiedPositionStats(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
+                <button onclick="loadUnifiedPositionStats(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
+                <button onclick="loadUnifiedPositionStats(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
+                <button onclick="loadUnifiedPositionStats(168)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">7 Days</button>
+            </div>
+            <label for="positions-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
+            <input type="datetime-local" id="positions-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label for="positions-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
+            <input type="datetime-local" id="positions-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <button onclick="loadUnifiedPositionStats()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
+            <!-- Memory Stats Card -->
+            <div onclick="switchPositionDataSource('memory')" style="padding: 20px; background: #1e1e1e; border-radius: 8px; border: 2px solid #4caf50; cursor: pointer; transition: all 0.3s ease;">
+                <h3 style="margin: 0 0 15px 0; color: #4caf50; font-size: 18px;">📊 Live Memory</h3>
+                <div id="memory-stats" style="color: #e0e0e0; font-size: 14px; line-height: 1.8;">
+                    <div><strong>Positions:</strong> <span id="memory-positions">-</span></div>
+                    <div><strong>Aircraft:</strong> <span id="memory-aircraft">-</span></div>
+                    <div><strong>Flights:</strong> <span id="memory-flights">-</span></div>
+                    <div><strong>Airlines:</strong> <span id="memory-airlines">-</span></div>
+                </div>
+            </div>
+            
+            <!-- Cache Stats Card -->
+            <div onclick="switchPositionDataSource('cache')" style="padding: 20px; background: #1e1e1e; border-radius: 8px; border: 2px solid #2196f3; cursor: pointer; transition: all 0.3s ease;">
+                <h3 style="margin: 0 0 15px 0; color: #2196f3; font-size: 18px;">💾 Cache</h3>
+                <div id="cache-stats" style="color: #e0e0e0; font-size: 14px; line-height: 1.8;">
+                    <div><strong>Positions:</strong> <span id="cache-positions">-</span></div>
+                    <div><strong>Aircraft:</strong> <span id="cache-aircraft">-</span></div>
+                    <div><strong>Flights:</strong> <span id="cache-flights">-</span></div>
+                    <div><strong>Airlines:</strong> <span id="cache-airlines">-</span></div>
+                </div>
+            </div>
+            
+            <!-- S3 Buckets Stats Card -->
+            <div onclick="switchPositionDataSource('s3')" style="padding: 20px; background: #1e1e1e; border-radius: 8px; border: 2px solid #ff9800; cursor: pointer; transition: all 0.3s ease;">
+                <h3 style="margin: 0 0 15px 0; color: #ff9800; font-size: 18px;">☁️ S3 Buckets</h3>
+                <div id="bucket-stats" style="color: #e0e0e0; font-size: 14px; line-height: 1.8;">
+                    <div><strong>Positions:</strong> <span id="bucket-positions">-</span></div>
+                    <div><strong>Aircraft:</strong> <span id="bucket-aircraft">-</span></div>
+                    <div><strong>Flights:</strong> <span id="bucket-flights">-</span></div>
+                    <div><strong>Airlines:</strong> <span id="bucket-airlines">-</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <h3 style="color: #e0e0e0; margin-top: 30px; margin-bottom: 15px;">Time Series Graph</h3>
+        <div style="margin-bottom: 15px;">
+            <label style="color: #e0e0e0; margin-right: 15px;"><input type="checkbox" id="graph-positions" checked onchange="drawPositionsTimeSeriesGraph(positionDataSources[positionDataSources.active])"> Positions</label>
+            <label style="color: #e0e0e0; margin-right: 15px;"><input type="checkbox" id="graph-aircraft" checked onchange="drawPositionsTimeSeriesGraph(positionDataSources[positionDataSources.active])"> Aircraft</label>
+            <label style="color: #e0e0e0; margin-right: 15px;"><input type="checkbox" id="graph-flights" checked onchange="drawPositionsTimeSeriesGraph(positionDataSources[positionDataSources.active])"> Flights</label>
+            <label style="color: #e0e0e0;"><input type="checkbox" id="graph-airlines" checked onchange="drawPositionsTimeSeriesGraph(positionDataSources[positionDataSources.active])"> Airlines</label>
+        </div>
+        <canvas id="positions-timeseries-canvas" width="1200" height="400" style="border: 1px solid #555; background: #1e1e1e;"></canvas>
+    </div>
+
+    <div id="flights-tab" class="tab-content">
+        <h2>Flights</h2>
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadFlights(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
+                <button onclick="loadFlights(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
+                <button onclick="loadFlights(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
+            </div>
+            <label for="flights-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
+            <input type="datetime-local" id="flights-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label for="flights-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
+            <input type="datetime-local" id="flights-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label style="font-weight: bold; color: #e0e0e0;">Gap minutes: <input id="flights-gap" type="number" value="5" min="1" style="width:60px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px; padding: 5px;"></label>
+            <button onclick="loadFlights()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+        </div>
+        <div id="flights-summary" style="margin-top:15px;padding:12px;background:#f44336;border-radius:4px;border-left:4px solid #c62828;font-weight:bold;font-size:16px;color:#fff;"></div>
+        <table id="flights-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="icao">ICAO</th>
+                    <th data-sort="callsign">Callsign</th>
+                    <th data-sort="airline_code">Airline Code</th>
+                    <th data-sort="airline">Airline</th>
+                    <th>Airline Logo</th>
+                    <th data-sort="reg">Reg</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th>Manufacturer Logo</th>
+                    <th data-sort="bodytype">Body Type</th>
+                    <th data-sort="start_time">Start Time</th>
+                    <th data-sort="end_time">End Time</th>
+                    <th data-sort="duration" data-sort-numeric="true">Duration (min)</th>
+                    <th data-sort="start_lat" data-sort-numeric="true">Start Lat</th>
+                    <th data-sort="start_lon" data-sort-numeric="true">Start Lon</th>
+                    <th data-sort="end_lat" data-sort-numeric="true">End Lat</th>
+                    <th data-sort="end_lon" data-sort-numeric="true">End Lon</th>
+                    <th data-sort="max_alt" data-sort-numeric="true">Max Alt</th>
+                    <th data-sort="reports" data-sort-numeric="true">Reports</th>
+                    <th data-sort="slant_start" data-sort-numeric="true">Slant Range Start (nm)</th>
+                    <th data-sort="slant_end" data-sort-numeric="true">Slant Range End (nm)</th>
+                </tr>
+            </thead>
+            <tbody id="flights-table-body"></tbody>
+        </table>
+    </div>
+
+    <div id="squawk-tab" class="tab-content">
+        <h2>Squawk Code Transition Analysis</h2>
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <div style="margin-bottom: 10px;">
+                <button onclick="loadSquawkTransitions(1)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">1 Hour</button>
+                <button onclick="loadSquawkTransitions(6)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">6 Hours</button>
+                <button onclick="loadSquawkTransitions(24)" style="padding: 5px 10px; margin-right: 5px; background: #2a2a2a; color: #42a5f5; border: 1px solid #42a5f5; border-radius: 4px; cursor: pointer;">24 Hours</button>
+            </div>
+            <label for="squawk-start-time" style="font-weight: bold; color: #e0e0e0;">Start Time:</label>
+            <input type="datetime-local" id="squawk-start-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <label for="squawk-end-time" style="font-weight: bold; color: #e0e0e0;">End Time:</label>
+            <input type="datetime-local" id="squawk-end-time" style="padding: 5px; margin-right: 15px; background: #2a2a2a; color: #e0e0e0; border: 1px solid #555; border-radius: 4px;">
+            <button onclick="loadSquawkTransitions()" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+        </div>
+        <div id="squawk-summary"></div>
+        <h3 style="color: #4caf50; border-bottom: 2px solid #66bb6a; padding-bottom: 8px; margin-top: 20px;">VFR (1200)</h3>
+        <ul id="vfr-transitions" style="list-style: none; padding: 0;"></ul>
+        <h3 style="color: #2196f3; border-bottom: 2px solid #42a5f5; padding-bottom: 8px; margin-top: 20px;">IFR LOW (0000-1777)</h3>
+        <ul id="ifr-low-transitions" style="list-style: none; padding: 0;"></ul>
+        <h3 style="color: #1976d2; border-bottom: 2px solid #1e88e5; padding-bottom: 8px; margin-top: 20px;">IFR HIGH (2000-7777)</h3>
+        <ul id="ifr-high-transitions" style="list-style: none; padding: 0;"></ul>
+        <h3 style="color: #f44336; border-bottom: 2px solid #e53935; padding-bottom: 8px; margin-top: 20px;">SPECIAL (7500/7600/7700)</h3>
+        <ul id="special-transitions" style="list-style: none; padding: 0;"></ul>
+        <h3 style="color: #9e9e9e; border-bottom: 2px solid #bdbdbd; padding-bottom: 8px; margin-top: 20px;">OTHER</h3>
+        <ul id="other-transitions" style="list-style: none; padding: 0;"></ul>
+    </div>
+
+    <div id="heatmap-tab" class="tab-content">
+        <h2>Aircraft Position Heatmap</h2>
+
+        <div style="margin-bottom: 20px; padding: 15px; background: #2a2a2a; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #0066cc; margin-top: 0;">🗺️ Leaflet Heatmap Viewer</h3>
+            <a href="/heatmap-leaflet" target="_blank" style="display: inline-block; padding: 8px 16px; background: #0066cc; color: white; border-radius: 4px; text-decoration: none; font-weight: 500;">Open Leaflet Heatmap Viewer →</a>
+        </div>
+    </div>
+
+    <div id="cache-tab" class="tab-content">
+        <h2>Cache Status</h2>
+        
+        <div style="margin-bottom: 20px; padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #4caf50; margin-top: 0;">📊 Heatmap Cache Statistics</h3>
+            <button onclick="loadCacheStatus()" style="padding: 8px 16px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 15px;">🔄 Refresh Cache Status</button>
+            <button onclick="clearHeatmapCache()" style="padding: 8px 16px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">🗑️ Clear Heatmap Cache</button>
+            
+            <div id="cache-status" style="color: #e0e0e0; font-family: monospace; background: #2a2a2a; padding: 15px; border-radius: 4px; margin-top: 10px;">
+                <div>Loading cache status...</div>
+            </div>
+        </div>
+        
+        <div style="padding: 15px; background: #1e1e1e; border-radius: 8px; border: 1px solid #333;">
+            <h3 style="color: #2196f3; margin-top: 0;">💾 Cache Information</h3>
+            <div style="color: #e0e0e0; line-height: 1.6;">
+                <p>The heatmap cache stores aircraft position data in memory for faster loading of heatmap visualizations.</p>
+                <p><strong>Cache Contents:</strong> Aircraft positions with timestamps, aircraft types, manufacturers, and flight information.</p>
+                <p><strong>Cache Source:</strong> S3 bucket data (piaware_aircraft_log files)</p>
+                <p><strong>Cache Refresh:</strong> Automatically reloaded when cleared or when server restarts</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app-test.js"></script>
+</body>
+</html>

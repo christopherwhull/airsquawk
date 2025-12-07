@@ -21,6 +21,9 @@ function waitForEnter(message) {
 
 (async () => {
     const url = process.argv[2] || 'http://localhost:3002/heatmap-leaflet.html';
+    // Simple ignore list via query param: ?ignore_console=regex1&ignore_console=regex2
+    const ignoreConsoleParams = new URL(url, 'http://localhost').searchParams.getAll('ignore_console');
+    const ignoreConsolePatterns = ignoreConsoleParams.map(p => { try { return new RegExp(p); } catch (e) { return null; } }).filter(Boolean);
     const screenshot = process.argv[3] || 'tools/leaflet-screenshot.png';
     console.log('Opening', url);
     const browser = await puppeteer.launch({ 
@@ -30,6 +33,7 @@ function waitForEnter(message) {
     const page = await browser.newPage();
     const consoleLogs = [];
     const networkRequests = [];
+    const networkResponses = [];
 
     page.on('console', msg => {
         try {
@@ -49,6 +53,7 @@ function waitForEnter(message) {
             const url = res.url();
             const status = res.status();
             console.log(`[RES] ${status} ${url}`);
+            networkResponses.push({ url, status });
         } catch (e) {}
     });
 
@@ -148,12 +153,27 @@ function waitForEnter(message) {
         console.error('Error loading page:', err);
     }
 
+    // Compute ignored 'vfr-sectional' 404 entries outside Chicago
+    const chicagoBbox = { minLat: 41.0, maxLat: 42.5, minLon: -88.0, maxLon: -86.0 };
+    function tile2lon(x, z) { return (x / Math.pow(2, z)) * 360 - 180; }
+    function tile2lat(y, z) { const n = Math.PI - 2 * Math.PI * y / Math.pow(2, z); return (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))); }
+    function tileBbox(z, x, y) { const lon1 = tile2lon(x, z); const lon2 = tile2lon(x + 1, z); const lat1 = tile2lat(y + 1, z); const lat2 = tile2lat(y, z); return { minLat: Math.min(lat1, lat2), maxLat: Math.max(lat1, lat2), minLon: Math.min(lon1, lon2), maxLon: Math.max(lon1, lon2) }; }
+    function bboxIntersects(b1, b2) { return !(b2.minLon > b1.maxLon || b2.maxLon < b1.minLon || b2.minLat > b1.maxLat || b2.maxLat < b1.minLat); }
+    function parseVfrTileUrl(url) { const m = url.match(/vfr-sectional\/(\d+)\/(\d+)\/(\d+)/i); if (!m) return null; return { z: parseInt(m[1], 10), x: parseInt(m[2], 10), y: parseInt(m[3], 10) }; }
+
+    const vfr404OutsideChicago = networkResponses.some(r => r.status === 404 && /vfr-sectional/i.test(r.url) && (() => { const v = parseVfrTileUrl(r.url); if (!v) return false; const tb = tileBbox(v.z, v.x, v.y); return !bboxIntersects(tb, chicagoBbox); })());
+
     // Save logs to files
     try {
         const logDir = 'runtime/screenshots';
         const consolePath = require('path').join(logDir, 'laporte-leaflet-console.log');
         const networkPath = require('path').join(logDir, 'laporte-leaflet-network.log');
-        fs.writeFileSync(consolePath, JSON.stringify(consoleLogs, null, 2));
+        // Optionally filter console logs: remove 'Failed to load resource' if vfr404OutsideChicago
+        let filteredConsoleLogs = consoleLogs;
+        if (vfr404OutsideChicago) {
+            filteredConsoleLogs = consoleLogs.filter(c => !(/Failed to load resource/i.test(c.text)));
+        }
+        fs.writeFileSync(consolePath, JSON.stringify(filteredConsoleLogs, null, 2));
         fs.writeFileSync(networkPath, JSON.stringify(networkRequests, null, 2));
         console.log('Saved logs to', consolePath, 'and', networkPath);
     } catch (e) {

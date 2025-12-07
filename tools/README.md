@@ -139,6 +139,51 @@ python tools/aircraft-tracker.py
 python tools/test_all.py
 ```
 
+## Leaflet test harness (Puppeteer)
+
+The `tools/leaflet-test.js` script is a Puppeteer-based capture harness for the live Leaflet heatmap (`heatmap-leaflet.html`). Use it to:
+- Select overlay layers
+- Collect popups for visible aircraft
+- Check that per-hex polylines (live/long/persistent/temp) exist
+
+Command example (full run):
+
+```bash
+node tools/leaflet-test.js "http://localhost:3002/heatmap-leaflet.html" screenshots/testplan/leaflet-test-full --select-overlays --collect-popups --ignore-console="mesonet.agron.iastate.edu/cache/tile.py/.*sfc_analysis/.*" --ignore-console="http://localhost:3002/api/v2logos/.*"
+```
+
+This will produce the following artifacts in the `screenshots/testplan/leaflet-test-full` directory (or the `outdir` you supply):
+- `leaflet-screenshot.png` — full-page screenshot
+- `leaflet-console.json` — captured console logs
+- `leaflet-network.json` — captured network requests & responses
+- `leaflet-pane-summary.json` — counts of drawn paths, svgs, etc.
+- `popups.json` — collected popup HTML for visible aircraft
+- `hex-check-results.json` — auto-detected or explicit hex check results
+- `run-info.json` — instrumentation summary with flags, Node version, counts, and the hex-check results
+
+Test Plan & Artifacts
+---------------------
+This harness implements the following test plan (integration-style):
+
+- Boot the Leaflet production heatmap page: `heatmap-leaflet.html`.
+- Optionally select all overlay tile layers and ensure the `show-live` and `show-heatmap` toggles are enabled.
+- Move the map center 30 miles west, zoom in 4 levels and back out 4 levels (to exercise tile loading, overlays and multiscale rendering).
+- Optionally collect popup contents for all visible aircraft (if `--collect-popups` is supplied); click each marker or DOM icon to open the popup and capture the HTML.
+- Auto-select up to 3 visible hexes (or use `--check-hex=aabbcc`) and check for polylines in `live`, `long`, `persistent` or `temp` layers for each hex.
+- Assert that at least one auto-selected hex has a polyline (if auto-selected), or that each explicit `--check-hex` supplied has a polyline.
+- Record any assertion failures (fatal) or warnings (non-fatal) and write them to `assertion-failures.json` and `assertion-warnings.json` respectively.
+
+Writes the artifacts to `screenshots/testplan/<outdir>` by default, along with `run-info.json` which is useful for summarizing the run.  The `run-info.json` contains a `summary` object which includes `paneSummary`, `gridHasCells`, `layerCounts`, `selectedHexes`, `autoSelectedHexes`, `consoleErrorCount`, `pageErrorCount`, and `hexCheckSummary`.
+
+Tips & Troubleshooting
+----------------------
+- If the harness fails due to a console error from an external service (e.g., Mesonet tile 404), pass an `--ignore-console` pattern using `--ignore-console=PATTERN`.
+- For a deterministic hex-check run, pass explicit `--check-hex=hex1,hex2` to force strict assertions for those hexes.
+- Use `npm run test:leaflet:full` to run the harness with typical options and write artifacts to `screenshots/testplan/leaflet-test-full`.
+
+Use `test-heatmap.ps1 -FullRun` or `npm run test:all` and the `tools/test-all.js` wrapper to run the full Leaflet harness as part of the broader test suite. The harness will auto-select visible hexes if `--check-hex` is omitted.
+
+
 ## Restart Workflow (AI Agent)
 
 This project includes scripts and utilities to help an AI agent or automation safely restart the Node.js server when code is updated. Follow the steps below.

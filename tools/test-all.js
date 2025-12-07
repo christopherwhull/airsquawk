@@ -50,6 +50,11 @@ async function main() {
   const svgIconsExit = await runCmd('SVG Icons Test', 'node', ['tools/test-svg-icons.js'], { cwd: rootDir });
   failures += svgIconsExit ? 1 : 0;
 
+  // 8) Run Leaflet Puppeteer full harness (select overlays, collect popups, auto-check hexes)
+  const leafFullOut = path.join('screenshots', 'testplan', 'leaflet-test-full-' + Date.now().toString());
+  const leafFullExit = await runCmd('Leaflet Puppeteer Full Harness', 'node', ['tools/leaflet-test.js', 'http://localhost:3002/heatmap-leaflet.html', leafFullOut, '--select-overlays', '--collect-popups', "--ignore-console=mesonet.agron.iastate.edu/cache/tile.py/.*sfc_analysis/.*", "--ignore-console=http://localhost:3002/api/v2logos/.*"], { cwd: rootDir });
+  failures += leafFullExit ? 1 : 0;
+
   // 3) Python test suite (integration, endpoint and all-scripts) - detect python if present
 
   // 4) On Windows run the Python-based test script (cross-platform)
