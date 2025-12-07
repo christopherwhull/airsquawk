@@ -213,7 +213,7 @@ The script provides colorized console output:
 
 **No aircraft data:**
 - Verify PiAware dump1090 is running and accessible
-- Check correct IP:port for your PiAware: `curl http://192.168.0.178:8080/data/aircraft.json`
+- Check correct IP:port for your PiAware: `curl http://192.168.0.161:8080/data/aircraft.json`
 - Ensure network connectivity to PiAware
 
 ## Integration with Dashboard

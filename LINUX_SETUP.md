@@ -105,7 +105,7 @@ Add environment variables under `[Service]`:
 ```ini
 [Service]
 ...
-Environment="PIAWARE_URL=http://192.168.0.178:8080/data/aircraft.json"
+Environment="PIAWARE_URL=http://192.168.0.161:8080/data/aircraft.json"
 Environment="S3_ENDPOINT=http://localhost:9000"
 Environment="S3_ACCESS_KEY=minioadmin"
 Environment="S3_SECRET_KEY=minioadmin123"
@@ -120,7 +120,7 @@ sudo nano /etc/default/aircraft-dashboard
 
 Add:
 ```bash
-PIAWARE_URL=http://192.168.0.178:8080/data/aircraft.json
+PIAWARE_URL=http://192.168.0.161:8080/data/aircraft.json
 S3_ENDPOINT=http://localhost:9000
 S3_ACCESS_KEY=minioadmin
 S3_SECRET_KEY=minioadmin123
@@ -238,7 +238,7 @@ docker-compose logs -f dashboard
 ### "Cannot connect to PiAware"
 ```bash
 # Test PiAware connectivity
-curl http://192.168.0.178:8080/data/aircraft.json
+curl http://192.168.0.161:8080/data/aircraft.json
 
 # Check PIAWARE_URL in config.js or env vars
 echo $PIAWARE_URL
@@ -308,7 +308,7 @@ pkill -f "node server.js"
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3002 | Server port |
-| `PIAWARE_URL` | http://192.168.0.178:8080/data/aircraft.json | PiAware data endpoint |
+| `PIAWARE_URL` | http://192.168.0.161:8080/data/aircraft.json | PiAware data endpoint |
 | `S3_ENDPOINT` | http://localhost:9000 | MinIO/S3 endpoint |
 | `S3_ACCESS_KEY` | minioadmin | S3 access key |
 | `S3_SECRET_KEY` | minioadmin123 | S3 secret key |

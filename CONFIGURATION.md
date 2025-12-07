@@ -24,7 +24,7 @@ All settings can be overridden via environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | 3002 | Server port |
-| `PIAWARE_URL` | http://192.168.0.178:8080/data/aircraft.json | PiAware data source |
+| `PIAWARE_URL` | http://192.168.0.161:8080/data/aircraft.json | PiAware data source |
 | `S3_ENDPOINT` | http://localhost:9000 | MinIO/S3 endpoint |
 | `S3_REGION` | us-east-1 | S3 region |
 | `S3_ACCESS_KEY` | minioadmin | S3 access key |

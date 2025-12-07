@@ -144,7 +144,7 @@ npm install
 ```
 
 3. Configure settings in `config.js` or environment variables:
-   - Set your PiAware URL (default: `http://192.168.0.178:8080/data/aircraft.json`)
+   - Set your PiAware URL (default: `http://192.168.0.161:8080/data/aircraft.json`)
    - Configure S3/MinIO connection details (default: `http://localhost:9000`)
    - Adjust server port (default: 3002)
    - See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration options

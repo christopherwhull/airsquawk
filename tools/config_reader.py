@@ -22,7 +22,7 @@ def read_config():
         's3_secret_key': 'minioadmin123',
         'read_bucket': 'aircraft-data',
         'write_bucket': 'aircraft-data-new',
-        'piaware_url': 'http://192.168.0.178:8080/data/aircraft.json'
+        'piaware_url': 'http://192.168.0.161:8080/data/aircraft.json'
     }
 
     try:

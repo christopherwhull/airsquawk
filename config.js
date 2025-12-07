@@ -17,7 +17,7 @@ module.exports = {
 
     // --- Data Source Configuration ---
     dataSource: {
-        piAwareUrl: process.env.PIAWARE_URL || 'http://192.168.0.178:8080/data/aircraft.json',
+        piAwareUrl: process.env.PIAWARE_URL || 'http://192.168.0.161:8080/data/aircraft.json',
         receiverTimeout: 5000, // milliseconds
     },
 
