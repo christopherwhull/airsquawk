@@ -10,6 +10,7 @@ const puppeteer = require('puppeteer');
 async function run() {
     const url = process.argv[2] || 'http://localhost:3002/heatmap-leaflet.html';
     const outdir = process.argv[3] || path.join('tools', `leaflet-test-${Date.now()}`);
+        const selectOverlays = (process.argv.indexOf('--select-overlays') !== -1);
     fs.mkdirSync(outdir, { recursive: true });
 
     const consoleMessages = [];
@@ -70,6 +71,22 @@ async function run() {
 
     // Waiting some time to allow polling and rendering (tunable)
     await new Promise(r => setTimeout(r, 8000));
+        // If requested, ensure all overlay checkboxes are checked before capturing
+        if (selectOverlays) {
+            console.log('Selecting overlay checkboxes...');
+            await page.evaluate(() => {
+                const inputs = Array.from(document.querySelectorAll('.leaflet-control-layers-selector'));
+                inputs.forEach(i => {
+                    try {
+                        // Only click overlays (checkbox inputs), not base layer radios
+                        if (i.type && i.type.toLowerCase() === 'checkbox' && !i.checked) {
+                            i.click();
+                        }
+                    } catch (e) {}
+                });
+            });
+            await new Promise(r => setTimeout(r, 1500)); // let layers render
+        }
 
     // Evaluate DOM to find leaflet panes and counts of SVG paths/circles inside panes
     const paneSummary = await page.evaluate(() => {

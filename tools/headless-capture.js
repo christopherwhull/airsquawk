@@ -57,6 +57,21 @@ function waitForEnter(message) {
         // Wait a bit to allow live polling to run
         await new Promise(r => setTimeout(r, 3000)); // Initial load time
 
+        // If requested via query param `select_overlays=1`, check overlay checkboxes
+        try {
+            const u = new URL(page.url());
+            if (u.searchParams.get('select_overlays') === '1') {
+                console.log('Selecting overlay checkboxes (interactive)');
+                await page.evaluate(() => {
+                    const inputs = Array.from(document.querySelectorAll('.leaflet-control-layers-selector'));
+                    inputs.forEach(i => {
+                        try { if (i.type && i.type.toLowerCase() === 'checkbox' && !i.checked) i.click(); } catch (e) {}
+                    });
+                });
+                await new Promise(r => setTimeout(r, 1500));
+            }
+        } catch (e) {}
+
         // Set view to LaPorte Indiana
         console.log('Setting view to LaPorte Indiana');
         await page.evaluate(() => {
