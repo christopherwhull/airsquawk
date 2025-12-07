@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heatmap Test</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { background-color: #0f0f10; color: #e5e5e5; }
+        html, body { margin: 0; height: 100%; background: #0f0f10; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+        #map { position: absolute; inset: 0; }
+        .status { position: absolute; bottom: 8px; left: 8px; padding: 6px 12px; border-radius: 4px; background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; z-index: 500; }
+        .controls { position: absolute; top: 12px; left: 12px; z-index: 550; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="status">Leaflet ready</div>
+    <div class="controls">
+        <!-- minimal controls expected by app code -->
+        <label style="display:none"><input type="checkbox" id="show-live" checked> show-live</label>
+        <label style="display:none"><input type="checkbox" id="persist-on-click"> persist-on-click</label>
+        <input type="number" id="track-window-input" style="display:none" value="1">
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // minimal stubs used by test harness
+        function toggleLivePositions() { console.info('toggleLivePositions: stubbed'); }
+        function loadSettings() { console.info('loadSettings: stubbed'); }
+        function loadGridData() { console.info('loadGridData: stubbed'); }
+        function loadAirlineMapping() { console.info('loadAirlineMapping: stubbed'); }
+        function startLongTracksPolling() { console.info('startLongTracksPolling: stubbed'); }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const map = L.map('map').setView([40.0, -95.0], 4);
+            window.map = map;
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 }).addTo(map);
+
+            L.circle([39.5, -95.0], {
+                radius: 300000,
+                color: '#00ff99',
+                fillColor: '#00ff99',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+
+            // Safely check for optional UI elements
+            try {
+                const showLiveElem = document.getElementById('show-live');
+                if (showLiveElem && showLiveElem.checked) toggleLivePositions();
+            } catch (e) { console.warn('show-live check failed', e); }
+        });
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heatmap Test</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { background-color: #0f0f10; color: #e5e5e5; }
+        html, body { margin: 0; height: 100%; background: #0f0f10; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; }
+        #map { position: absolute; inset: 0; }
+        .status { position: absolute; bottom: 8px; left: 8px; padding: 6px 12px; border-radius: 4px; background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; z-index: 500; }
+        .controls { position: absolute; top: 12px; left: 12px; z-index: 550; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="status">Leaflet ready</div>
+    <div class="controls">
+        <!-- minimal controls expected by app code -->
+        <label style="display:none"><input type="checkbox" id="show-live" checked> show-live</label>
+        <label style="display:none"><input type="checkbox" id="persist-on-click"> persist-on-click</label>
+        <input type="number" id="track-window-input" style="display:none" value="1">
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // minimal stubs used by test harness
+        function toggleLivePositions() { console.info('toggleLivePositions: stubbed'); }
+        function loadSettings() { console.info('loadSettings: stubbed'); }
+        function loadGridData() { console.info('loadGridData: stubbed'); }
+        function loadAirlineMapping() { console.info('loadAirlineMapping: stubbed'); }
+        function startLongTracksPolling() { console.info('startLongTracksPolling: stubbed'); }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const map = L.map('map').setView([40.0, -95.0], 4);
+            window.map = map;
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 18 }).addTo(map);
+
+            L.circle([39.5, -95.0], {
+                radius: 300000,
+                color: '#00ff99',
+                fillColor: '#00ff99',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+
+            // Safely check for optional UI elements
+            try {
+                const showLiveElem = document.getElementById('show-live');
+                if (showLiveElem && showLiveElem.checked) toggleLivePositions();
+            } catch (e) { console.warn('show-live check failed', e); }
+        });
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang= en>
+<head>
+    <meta charset=UTF-8>
+    <meta name=viewport content=width=device-width initial-scale=1.0>
+    <title>Heatmap Test</title>
+    <link rel=stylesheet href=https://unpkg.com/leaflet@1.9.4/dist/leaflet.css />
+    <style>
+        :root {
+            background-color: #0f0f10;
+            color: #e5e5e5;
+        }
+        html, body {
+            margin: 0;
+            height: 100%;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
+            background: #0f0f10;
+            try {
+                const showLiveElem = document.getElementById('show-live');
+                if (showLiveElem && showLiveElem.checked) {
+                    toggleLivePositions();
+                }
+            } catch (e) { console.warn('show-live check failed:', e); }
+            inset: 0;
+        }
+        .status {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            padding: 6px 12px;
+            border-radius: 4px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 500;
+        }
+    </style>
+</head>
+<body>
+    <div id=map></div>
+    <div class=status>Leaflet ready</div>
+    <script src=https://unpkg.com/leaflet@1.9.4/dist/leaflet.js></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const map = L.map('map').setView([40.0, -95.0], 4);
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 18
+            }).addTo(map);
+
+            L.circle([39.5, -95.0], {
+                radius: 300000,
+                color: '#00ff99',
+                fillColor: '#00ff99',
+                fillOpacity: 0.1,
+                weight: 2
+            }).addTo(map);
+        });
+    </script>
+</body>
+</html>
