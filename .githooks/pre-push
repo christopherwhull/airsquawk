@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Prevent accidental pushing to the 'main' branch from local dev workspaces.
+# This hook allows pushing to other branches, such as feature branches or release branches.
+protected_branch="main"
+while read local_ref local_sha remote_ref remote_sha; do
+  # remote_ref format: refs/heads/<branch>
+  ref="${remote_ref#refs/heads/}"
+  if [ "$ref" = "$protected_branch" ]; then
+    echo "Pushing to the protected branch '$protected_branch' is disabled by your local pre-push hook." >&2
+    echo "Push to a feature/release branch instead (e.g. 'git push origin backup/protect-2.2.0')." >&2
+    exit 1
+  fi
+done
+exit 0
