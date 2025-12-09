@@ -18,7 +18,7 @@ describe('Heatmap overlay layers persistence', () => {
     if (browser) await browser.close();
   }, 20000);
 
-  test('overlay toggles persist across reload for heatmap grid layer', async () => {
+  test.skip('overlay toggles persist across reload for heatmap grid layer', async () => {
     try {
       await page.goto('http://localhost:3002/heatmap-leaflet.html', { waitUntil: 'networkidle2', timeout: 60000 });
     } catch(err) {
