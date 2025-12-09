@@ -15,11 +15,11 @@ Why it matters:
 >
 > 1) Clone the repo and install dependencies
 >
-> ```bash
-> git clone https://github.com/christopherwhull/aircraft-dashboard.git
-> cd aircraft-dashboard
-> npm install
-> ```
+```bash
+git clone https://github.com/christopherwhull/airsquawk.git
+cd airsquawk
+npm install
+```
 >
 > 2) Configure a PiAware endpoint in `config.json` or env var `PIAWARE_URL`
 >
@@ -134,8 +134,8 @@ When updating the server with new code, follow these steps to ensure a smooth tr
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/christopherwhull/aircraft-dashboard.git
-cd aircraft-dashboard
+git clone https://github.com/christopherwhull/airsquawk.git
+cd airsquawk
 ```
 
 2. Install dependencies:
@@ -238,7 +238,7 @@ http://localhost:3002
 - Follow [LINUX_SETUP.md](LINUX_SETUP.md) for comprehensive setup guide
 - Includes systemd service, Docker, and manual startup options
 - Run: `npm run restart:unix` or `bash restart-server.sh`
-- For production, use systemd service: `sudo systemctl start aircraft-dashboard`
+- For production, use systemd service: `sudo systemctl start airsquawk`
 
 ## Configuration
 
@@ -595,7 +595,7 @@ aircraft-data/ (read bucket - historical data)
 #### Media Pack Structure
 
 ```
-aircraft-dashboard-logos-YYYY-MM-DDTHH-MM-SS.zip
+airsquawk-logos-YYYY-MM-DDTHH-MM-SS.zip
 ├── logos/
 │   ├── AAL.png          # American Airlines logo
 │   ├── DAL.svg          # Delta Airlines logo
