@@ -5,7 +5,8 @@ This directory contains all the utility scripts and tools for the AirSquawk proj
 ## Categories
 
 ### Data Analysis & Processing
-- `aircraft-tracker.py` - Main aircraft tracking script with S3 uploads, KML generation, and optional TSDB writes
+- `aircraft-tracker.py` - **DEPRECATED**: Use `aircraft_tracker.py` in root directory instead. Main aircraft tracking script with S3 uploads, KML generation, and optional TSDB writes
+- `aircraft_tracker.py` - Main aircraft tracking script with S3 uploads, KML generation, and optional TSDB writes (in root directory)
 - `backfill_tsdb_from_s3.py` - Backfill historical position data from S3 minute files to TSDB
 - `analyze_readonly_source.py` - Analyze readonly data sources
 - `analyze_squawk_local.py` - Analyze squawk codes locally
@@ -134,7 +135,7 @@ Most scripts can be run directly with Node.js or Python:
 node tools/check_airline_stocks.js
 
 # Python tools
-python tools/aircraft-tracker.py
+python aircraft_tracker.py  # Main tracker (in root directory)
 
 # Backfill TSDB from S3 minute files
 python tools/backfill_tsdb_from_s3.py --dry-run  # Preview what would be backfilled
@@ -229,7 +230,7 @@ This project includes scripts and utilities to help an AI agent or automation sa
 	Tracker: Start with REST to InfluxDB v3 on port 8181 (direct token usage)
 	```pwsh
 	# Start the aircraft tracker and write to InfluxDB v3 via REST on port 8181
-	python tools/aircraft-tracker.py --enable-tsdb --tsdb-type influxdb3 --tsdb-url http://127.0.0.1:8181 --tsdb3-token apiv3_zfjnod7a-_LaE9RFBQ80xdzuxW7NVQxJ0pGcbzLr-42gOJ57SmL1l8D-HHAiDxJciG6vUl0Uw0LxYWjRKT3aiQ
+	python aircraft_tracker.py --enable-tsdb --tsdb-type influxdb3 --tsdb-url http://127.0.0.1:8181 --tsdb3-token apiv3_zfjnod7a-_LaE9RFBQ80xdzuxW7NVQxJ0pGcbzLr-42gOJ57SmL1l8D-HHAiDxJciG6vUl0Uw0LxYWjRKT3aiQ
 	```
 
 	Notes:

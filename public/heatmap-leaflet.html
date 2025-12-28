@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/esri-leaflet@3.0.10/dist/esri-leaflet.js"></script>
+    <script src="http://localhost:3003/socket.io/socket.io.js" onerror="console.error('Failed to load socket.io client')"></script>
     <style>
         :root {
             --bg: #0f0f10;
@@ -306,6 +307,48 @@
             </div>
 
             <div class="control-group">
+                <label for="show-boundaries">
+                    <input type="checkbox" id="show-boundaries"> Show All Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-artcc">
+                    <input type="checkbox" id="show-artcc"> ARTCC Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-countries">
+                    <input type="checkbox" id="show-countries"> Country Borders
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-fir">
+                    <input type="checkbox" id="show-fir"> FIR Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-us-states">
+                    <input type="checkbox" id="show-us-states"> US State Borders
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-canada">
+                    <input type="checkbox" id="show-canada"> Canadian Provinces
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-oceanic">
+                    <input type="checkbox" id="show-oceanic"> Oceanic Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
                 <label for="track-window-input">Track Window (min):</label>
                 <input id="track-window-input" type="number" min="1" max="1440" step="1" value="10" style="width:70px;">
             </div>
@@ -315,7 +358,7 @@
             </div>
 
             <div class="control-group">
-                <button id="toggle-persistent-visibility" onclick="togglePersistentVisibility()">Hide Persisted Tracks</button>
+                <input type="checkbox" id="toggle-persistent-tracks" onchange="togglePersistentTracks()" checked>
             </div>
 
             <div class="control-group">
@@ -323,6 +366,9 @@
             </div>
             <div class="control-group">
                 <button id="clear-airline-db-cache" onclick="clearAirlineDBCache()" style="background:#ff9800">🗑️ Clear Airline DB Cache</button>
+            </div>
+            <div class="control-group">
+                <button id="clear-all-caches" onclick="clearAllClientCaches()" style="background:#f44336">🗑️ Clear All Caches</button>
             </div>
 
             <button onclick="loadGridData()" title="Refresh">🔄</button>
@@ -385,6 +431,16 @@
             <strong>Debug</strong>
             <span id="debug-panel" style="font-size:12px;color:#bbb;display:block;max-height:72px;overflow:auto">No hex selected</span>
         </div>
+        <div class="info-card" id="custom-debug-card" style="font-size:12px;color:#bbb;display:block;max-height:144px;overflow:auto;line-height:1.4;">
+            <strong>Live Data Stats</strong>
+            <div>Aircraft Count: <strong id="debug-aircraft-count" style="color:white;">0</strong></div>
+            <div>Track Count: <strong id="debug-track-count" style="color:white;">0</strong></div>
+            <div>Track Points: <strong id="debug-track-point-count" style="color:white;">0</strong></div>
+            <div>Oldest Aircraft Seen: <strong id="debug-oldest-aircraft" style="color:white;">-</strong></div>
+            <div>Youngest Aircraft Seen: <strong id="debug-youngest-aircraft" style="color:white;">-</strong></div>
+            <div>Oldest Position Time: <strong id="debug-oldest-position" style="color:white;">-</strong></div>
+            <div>Newest Position Time: <strong id="debug-newest-position" style="color:white;">-</strong></div>
+        </div>
     </div>
 
     <div id="loading" class="loading">
@@ -412,7 +468,12 @@
         </div>
     </div>
 
-    <script>
+
+    <script type="module">
+        import { getVerticalRateColor, getIconForAircraft, createAircraftLogoIcon, buildPopupHTML } from './aircraftHelpers.js?v=2';
+
+        window.createAircraftLogoIcon = createAircraftLogoIcon;
+
         function updateAirlineDBIndicator() {
             const el = document.getElementById('airline-db-indicator');
             if (!el) return;
@@ -435,6 +496,118 @@
         function clearAirlineDBCache() {
             try { localStorage.removeItem('airlineDB-v1'); } catch (e) {}
             updateAirlineDBIndicator();
+        }
+
+        function clearAllClientCaches() {
+            try {
+                // Clear all client-side caches
+                aircraftInfoCache.clear();
+                verticalRateCache.clear();
+                flightsCache.clear();
+                squawkCache.clear();
+                lastPositions.clear();
+                lastSquawk.clear();
+                liveMarkers.clear();
+                liveTrails.clear();
+                trackLayer.clearLayers();
+                longTracksLayer.clearLayers();
+                persistentTracks.clear();
+                persistentTrackTimestamps.clear();
+
+                // Clear localStorage items
+                localStorage.removeItem('airlineDB-v1');
+                localStorage.removeItem('leafletHeatmapSettings');
+                localStorage.removeItem('positionsTimescale');
+
+                // Clear cookies (fallback storage)
+                document.cookie = 'leafletHeatmapSettings=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+
+                console.log('All client-side caches and storage cleared');
+                alert('All client-side caches and storage have been cleared. The page will show fresh data.');
+            } catch (e) {
+                console.error('Error clearing caches:', e);
+            }
+        }
+
+        function updateDebugInfo() {
+            try {
+                const aircraftCount = window.liveMarkers ? window.liveMarkers.size : 0;
+                document.getElementById('debug-aircraft-count').textContent = aircraftCount;
+
+                let trackCount = 0;
+                let trackPointCount = 0;
+                if (window.liveTrails) {
+                    window.liveTrails.forEach(trail => {
+                        trackCount++;
+                        if (trail && typeof trail.getLatLngs === 'function') {
+                            trackPointCount += trail.getLatLngs().length;
+                        }
+                    });
+                }
+                if (window.longTracksLayer) {
+                    window.longTracksLayer.eachLayer(lg => {
+                        trackCount++;
+                        lg.eachLayer(layer => {
+                            if (layer instanceof L.Polyline && typeof layer.getLatLngs === 'function') {
+                                trackPointCount += layer.getLatLngs().length;
+                            }
+                        });
+                    });
+                }
+                if (window.persistentTracksLayer) {
+                     window.persistentTracksLayer.eachLayer(lg => {
+                        trackCount++;
+                        lg.eachLayer(layer => {
+                            if (layer instanceof L.Polyline && typeof layer.getLatLngs === 'function') {
+                                trackPointCount += layer.getLatLngs().length;
+                            }
+                        });
+                    });
+                }
+
+
+                document.getElementById('debug-track-count').textContent = trackCount;
+                document.getElementById('debug-track-point-count').textContent = trackPointCount.toLocaleString();
+
+                let oldestAircraftTime = Infinity;
+                let youngestAircraftTime = -Infinity;
+                let oldestPositionTime = Infinity;
+                let newestPositionTime = -Infinity;
+
+                if (window.liveMarkers) {
+                    window.liveMarkers.forEach(markerData => {
+                        const markerTimestamp = markerData.lastSeen;
+                        if (markerTimestamp < oldestAircraftTime) oldestAircraftTime = markerTimestamp;
+                        if (markerTimestamp > youngestAircraftTime) youngestAircraftTime = markerTimestamp;
+
+                        if (markerData.marker && markerData.marker._posData && markerData.marker._posData.timestamp) {
+                             const posTimestamp = markerData.marker._posData.timestamp;
+                             if (posTimestamp < oldestPositionTime) oldestPositionTime = posTimestamp;
+                             if (posTimestamp > newestPositionTime) newestPositionTime = posTimestamp;
+                        }
+                    });
+                }
+
+                const formatTs = (ts) => {
+                    if (!isFinite(ts) || ts <= 0) return '-';
+                    return new Date(ts).toLocaleTimeString();
+                };
+                
+                const formatAge = (ts) => {
+                    if (!isFinite(ts) || ts <= 0) return '-';
+                    const ageSeconds = Math.floor((Date.now() - ts) / 1000);
+                    if (ageSeconds < 0) return 'future';
+                    return `${ageSeconds}s ago`;
+                };
+
+                document.getElementById('debug-oldest-aircraft').textContent = `${formatTs(oldestAircraftTime)} (${formatAge(oldestAircraftTime)})`;
+                document.getElementById('debug-youngest-aircraft').textContent = `${formatTs(youngestAircraftTime)} (${formatAge(youngestAircraftTime)})`;
+                document.getElementById('debug-oldest-position').textContent = `${formatTs(oldestPositionTime)} (${formatAge(oldestPositionTime)})`;
+                document.getElementById('debug-newest-position').textContent = `${formatTs(newestPositionTime)} (${formatAge(newestPositionTime)})`;
+            } catch (e) {
+                console.error("Error updating debug info:", e);
+                document.getElementById('debug-aircraft-count').textContent = 'ERR';
+            }
         }
         // Initialize map with dynamic centering based on config and receiver location
         async function initializeMap() {
@@ -601,7 +774,8 @@
             "FAA VFR Terminal": faaVfrTerminal,
             "FAA VFR Sectional": faaVfrSectional,
             "FAA IFR Area Low": faaIfrAreaLow,
-            "FAA IFR Enroute High": faaIfrHigh
+            "FAA IFR Enroute High": faaIfrHigh,
+            "Persistent Tracks": persistentTracksLayer
         };
         
         osmLayer.addTo(map);
@@ -631,12 +805,16 @@
         // Add our track layers now that `map` is ready
         if (typeof liveTracksLayer !== 'undefined') liveTracksLayer.addTo(map);
         if (typeof persistentTracksLayer !== 'undefined') persistentTracksLayer.addTo(map);
+
+        // Boundary layer references for toggling
+        let boundaryLayers = [];
+        let artccLayer, countryLayer, firLayer, stateLayer, provinceLayer, oceanicLayer;
         
         // Load ARTCC boundaries from FAA Open Data
         fetch('https://adds-faa.opendata.arcgis.com/datasets/67885972e4e940b2aa6d74024901c561_0.geojson')
             .then(response => response.json())
             .then(data => {
-                const artccLayer = L.geoJSON(data, {
+                artccLayer = L.geoJSON(data, {
                     style: {
                         color: 'red',
                         weight: 2,
@@ -646,6 +824,81 @@
                 layersControl.addOverlay(artccLayer, "ARTCC Boundaries");
             })
             .catch(error => console.error('Failed to load ARTCC boundaries:', error));
+
+        // Load World Country Boundaries
+        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+            .then(response => response.json())
+            .then(data => {
+                countryLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#666',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(countryLayer, "Country Borders");
+            })
+            .catch(error => console.error('Failed to load country boundaries:', error));
+
+        // Load FIR (Flight Information Region) Boundaries
+        fetch('https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/FIRBoundaries.geojson')
+            .then(response => response.json())
+            .then(data => {
+                firLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#00ff00',
+                        weight: 1.5,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(firLayer, "FIR Boundaries");
+            })
+            .catch(error => console.error('Failed to load FIR boundaries:', error));
+
+        // Load US State Boundaries
+        fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+            .then(response => response.json())
+            .then(data => {
+                stateLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#ffa500',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(stateLayer, "US State Borders");
+            })
+            .catch(error => console.error('Failed to load US state boundaries:', error));
+
+        // Load Canadian Province Boundaries
+        fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/canada.geojson')
+            .then(response => response.json())
+            .then(data => {
+                provinceLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#ff4500',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(provinceLayer, "Canadian Provinces");
+            })
+            .catch(error => console.error('Failed to load Canadian province boundaries:', error));
+
+        // Load Oceanic Control Areas (CTA/FIR boundaries for oceanic airspace)
+        fetch('https://raw.githubusercontent.com/vatsimnetwork/OceanicDataProject/master/OceanicBoundaries.geojson')
+            .then(response => response.json())
+            .then(data => {
+                oceanicLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#0080ff',
+                        weight: 2,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(oceanicLayer, "Oceanic Boundaries");
+            })
+            .catch(error => console.error('Failed to load oceanic boundaries:', error));
         
         // Load Squawk Transitions layer
         console.log('About to create squawk transitions layer...');
@@ -661,7 +914,7 @@
         }
         
         // Function to reload squawk transitions data for current time range
-        function loadSquawkTransitionsData() {
+        window.loadSquawkTransitionsData = function() {
             if (!squawkTransitionsLayer) {
                 console.warn('Squawk transitions layer not initialized yet');
                 return;
@@ -693,7 +946,7 @@
             const hours = windowToHours(timeWindow);
             console.log('Using time window:', timeWindow, 'converted to hours:', hours);
             
-            fetch(`/api/squawk-transitions-map?hours=${hours}`)
+            fetchWithTimeout(`/api/squawk-transitions-map?hours=${hours}`)
                 .then(response => {
                     console.log('Squawk transitions reload API response:', response.status);
                     return response.json();
@@ -716,7 +969,7 @@
                             const popupContent = `
                                 <div style="font-family: Arial, sans-serif; font-size: 12px;">
                                     <strong>Squawk Transition</strong><br>
-                                    Aircraft: ${transition.hex || transition.icao || 'Unknown'}<br>
+                                    Aircraft: ${ (transition.callsign || transition.ident) ? `<a href="https://flightaware.com/live/flight/${encodeURIComponent((transition.callsign||transition.ident).trim())}" target="_blank" rel="noopener noreferrer">${transition.callsign || transition.ident}</a>` : (transition.hex || transition.icao) ? `${transition.hex || transition.icao}` : 'Unknown'}<br>
                                     From: ${transition.from} → To: ${transition.to}<br>
                                     Time: ${new Date(transition.timestamp).toLocaleString()}<br>
                                     Position: ${transition.lat.toFixed(4)}, ${transition.lon.toFixed(4)}
@@ -734,7 +987,7 @@
                     console.log('Squawk transitions data reloaded with', data.transitions.length, 'markers');
                 })
                 .catch(error => console.error('Failed to reload squawk transitions:', error));
-        }
+        };
         
         // Load initial squawk transitions data
         loadSquawkTransitionsData();
@@ -813,31 +1066,38 @@
                 scalingMode: document.getElementById('scaling-mode').value,
                 opacity: document.getElementById('opacity').value,
                 showBorders: document.getElementById('show-borders').checked,
+                showBoundaries: document.getElementById('show-boundaries').checked,
+                showArtcc: document.getElementById('show-artcc').checked,
+                showCountries: document.getElementById('show-countries').checked,
+                showFir: document.getElementById('show-fir').checked,
+                showUsStates: document.getElementById('show-us-states').checked,
+                showCanada: document.getElementById('show-canada').checked,
+                showOceanic: document.getElementById('show-oceanic').checked,
                 showLive: true,
                 trackWindowMinutes: document.getElementById('track-window-input') ? document.getElementById('track-window-input').value : '1',
                 // Save layer selections: base layer and overlay keys
                 baseLayer: (() => {
                     try {
                         for (const k in baseLayers) if (baseLayers.hasOwnProperty(k)) {
-                            try { if (map.hasLayer(baseLayers[k])) return k; } catch(e){}
+                            try { if (window.map.hasLayer(baseLayers[k])) return k; } catch(e){}
                         }
                     } catch(e) {}
                     return null;
                 })(),
                 overlays: (() => {
                     const out = [];
-                    try { console.log('saveSettings: map.hasLayer(gridLayer)?', !!(map.hasLayer && map.hasLayer(gridLayer))); } catch(e) {}
+                    try { console.log('saveSettings: window.map.hasLayer(gridLayer)?', !!(window.map.hasLayer && window.map.hasLayer(gridLayer))); } catch(e) {}
                     try {
                         // Standard overlays registered via overlayLayers (use global if available)
                         const ols = (typeof window !== 'undefined' && window.overlayLayers) ? window.overlayLayers : (typeof overlayLayers !== 'undefined' ? overlayLayers : {});
                         for (const k in ols) if (ols.hasOwnProperty(k)) {
-                                try { const has = !!(map.hasLayer && map.hasLayer(ols[k])); if (has) out.push(k); console.log('saveSettings overlayLayers:', k, has); } catch(e) {}
+                                try { const has = !!(window.map.hasLayer && window.map.hasLayer(ols[k])); if (has) out.push(k); console.log('saveSettings overlayLayers:', k, has); } catch(e) {}
                             }
                         // Dynamic overlays that are not present on overlayLayers (Heatmap Grid, live/persist layers)
-                        try { const hasGrid = !!(map.hasLayer && map.hasLayer(gridLayer)); try { console.log('saveSettings: hasGrid =>', hasGrid); } catch(ex){} if (typeof gridLayer !== 'undefined' && gridLayer && hasGrid) out.push('Heatmap Grid'); } catch(e) {}
-                        try { if (typeof liveLayer !== 'undefined' && liveLayer && map.hasLayer(liveLayer)) out.push('Positions (Live)'); } catch(e) {}
-                        try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer && map.hasLayer(persistentTracksLayer)) out.push('Persisted Tracks'); } catch(e) {}
-                        try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer && map.hasLayer(liveTracksLayer)) out.push('Live Tracks'); } catch(e) {}
+                        try { const hasGrid = !!(window.map.hasLayer && window.map.hasLayer(gridLayer)); try { console.log('saveSettings: hasGrid =>', hasGrid); } catch(ex){} if (typeof gridLayer !== 'undefined' && gridLayer && hasGrid) out.push('Heatmap Grid'); } catch(e) {}
+                        try { if (typeof liveLayer !== 'undefined' && liveLayer && window.map.hasLayer(liveLayer)) out.push('Positions (Live)'); } catch(e) {}
+                        try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer && window.map.hasLayer(persistentTracksLayer)) out.push('Persisted Tracks'); } catch(e) {}
+                        try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer && window.map.hasLayer(liveTracksLayer)) out.push('Live Tracks'); } catch(e) {}
                     } catch(e) {}
                     return out;
                 })()
@@ -861,6 +1121,13 @@
                         document.getElementById('opacity-value').textContent = settings.opacity;
                     }
                     if (settings.showBorders !== undefined) document.getElementById('show-borders').checked = settings.showBorders;
+                    if (settings.showBoundaries !== undefined) document.getElementById('show-boundaries').checked = settings.showBoundaries;
+                    if (settings.showArtcc !== undefined) document.getElementById('show-artcc').checked = settings.showArtcc;
+                    if (settings.showCountries !== undefined) document.getElementById('show-countries').checked = settings.showCountries;
+                    if (settings.showFir !== undefined) document.getElementById('show-fir').checked = settings.showFir;
+                    if (settings.showUsStates !== undefined) document.getElementById('show-us-states').checked = settings.showUsStates;
+                    if (settings.showCanada !== undefined) document.getElementById('show-canada').checked = settings.showCanada;
+                    if (settings.showOceanic !== undefined) document.getElementById('show-oceanic').checked = settings.showOceanic;
                     if (settings.trackWindowMinutes !== undefined && document.getElementById('track-window-input')) {
                         document.getElementById('track-window-input').value = settings.trackWindowMinutes;
                     }
@@ -868,24 +1135,24 @@
                     try {
                         // Base layers: remove all then add selected
                         if (settings.baseLayer && baseLayers && baseLayers[settings.baseLayer]) {
-                            for (const k in baseLayers) if (baseLayers.hasOwnProperty(k)) { try { map.removeLayer(baseLayers[k]); } catch(e){} }
-                            try { map.addLayer(baseLayers[settings.baseLayer]); } catch(e){}
+                            for (const k in baseLayers) if (baseLayers.hasOwnProperty(k)) { try { window.map.removeLayer(baseLayers[k]); } catch(e){} }
+                            try { window.map.addLayer(baseLayers[settings.baseLayer]); } catch(e){}
                         }
                         // Overlays: add/remove overlays by name
                         if (Array.isArray(settings.overlays) && overlayLayers) {
                             for (const k in overlayLayers) if (overlayLayers.hasOwnProperty(k)) {
-                                if (settings.overlays.indexOf(k) !== -1) { try { map.addLayer(overlayLayers[k]); } catch (e) {} }
-                                else { try { map.removeLayer(overlayLayers[k]); } catch (e) {} }
+                                if (settings.overlays.indexOf(k) !== -1) { try { window.map.addLayer(overlayLayers[k]); } catch (e) {} }
+                                else { try { window.map.removeLayer(overlayLayers[k]); } catch (e) {} }
                             }
                         }
                         // Re-apply dynamic overlays not defined in overlayLayers
                         try {
                             if (Array.isArray(settings.overlays)) {
-                                if (settings.overlays.indexOf('Heatmap Grid') !== -1) { try { if (typeof gridLayer !== 'undefined' && gridLayer) map.addLayer(gridLayer); } catch (e) {} }
-                                else { try { if (typeof gridLayer !== 'undefined' && gridLayer) map.removeLayer(gridLayer); } catch (e) {} }
-                                if (settings.overlays.indexOf('Positions (Live)') !== -1) { try { if (typeof liveLayer !== 'undefined' && liveLayer) map.addLayer(liveLayer); } catch (e) {} } else { try { if (typeof liveLayer !== 'undefined' && liveLayer) map.removeLayer(liveLayer); } catch (e) {} }
-                                if (settings.overlays.indexOf('Persisted Tracks') !== -1) { try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer) map.addLayer(persistentTracksLayer); } catch (e) {} } else { try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer) map.removeLayer(persistentTracksLayer); } catch (e) {} }
-                                if (settings.overlays.indexOf('Live Tracks') !== -1) { try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer) map.addLayer(liveTracksLayer); } catch (e) {} } else { try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer) map.removeLayer(liveTracksLayer); } catch (e) {} }
+                                if (settings.overlays.indexOf('Heatmap Grid') !== -1) { try { if (typeof gridLayer !== 'undefined' && gridLayer) window.map.addLayer(gridLayer); } catch (e) {} }
+                                else { try { if (typeof gridLayer !== 'undefined' && gridLayer) window.map.removeLayer(gridLayer); } catch (e) {} }
+                                if (settings.overlays.indexOf('Positions (Live)') !== -1) { try { if (typeof liveLayer !== 'undefined' && liveLayer) window.map.addLayer(liveLayer); } catch (e) {} } else { try { if (typeof liveLayer !== 'undefined' && liveLayer) window.map.removeLayer(liveLayer); } catch (e) {} }
+                                if (settings.overlays.indexOf('Persisted Tracks') !== -1) { try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer) window.map.addLayer(persistentTracksLayer); } catch (e) {} } else { try { if (typeof persistentTracksLayer !== 'undefined' && persistentTracksLayer) window.map.removeLayer(persistentTracksLayer); } catch (e) {} }
+                                if (settings.overlays.indexOf('Live Tracks') !== -1) { try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer) window.map.addLayer(liveTracksLayer); } catch (e) {} } else { try { if (typeof liveTracksLayer !== 'undefined' && liveTracksLayer) window.map.removeLayer(liveTracksLayer); } catch (e) {} }
                             }
                         } catch(e) {}
                     } catch(e) { console.warn('Failed to re-apply layer settings', e); }
@@ -1014,6 +1281,47 @@
             if (currentData) updateGridDisplay();
         });
 
+        document.getElementById('show-boundaries').addEventListener('change', () => {
+            const showBoundaries = document.getElementById('show-boundaries').checked;
+            boundaryLayers.forEach(layer => {
+                if (showBoundaries) {
+                    if (!map.hasLayer(layer)) {
+                        map.addLayer(layer);
+                    }
+                } else {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                }
+            });
+            saveSettings();
+        });
+
+        // Helper function to toggle individual boundary layers
+        function toggleBoundaryLayer(checkboxId, layer) {
+            document.getElementById(checkboxId).addEventListener('change', () => {
+                const isChecked = document.getElementById(checkboxId).checked;
+                if (isChecked && layer) {
+                    if (!map.hasLayer(layer)) {
+                        map.addLayer(layer);
+                    }
+                } else if (layer) {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                }
+                saveSettings();
+            });
+        }
+
+        // Add event listeners for individual boundary checkboxes using helper function
+        toggleBoundaryLayer('show-artcc', artccLayer);
+        toggleBoundaryLayer('show-countries', countryLayer);
+        toggleBoundaryLayer('show-fir', firLayer);
+        toggleBoundaryLayer('show-us-states', stateLayer);
+        toggleBoundaryLayer('show-canada', provinceLayer);
+        toggleBoundaryLayer('show-oceanic', oceanicLayer);
+
         document.getElementById('scaling-mode').addEventListener('change', () => {
             saveSettings();
             if (currentData) updateGridDisplay();
@@ -1053,6 +1361,7 @@
         let liveLayer = L.layerGroup();
         let liveIntervalId = null;
         let isFetchingPositions = false;
+        let socket = null; // Socket.IO connection for live updates
         // Map of current live markers for smooth updates (hex -> L.marker)
         const liveMarkers = new Map();
         // Expose for tests and debugging: attach to window so external harnesses can access
@@ -1068,9 +1377,25 @@
         let hoverFetchTimer = null;
         let hoverClearTimer = null;
         const HOVER_DEBOUNCE_MS = 150; // delay before fetching track on hover
+
+        // Helper function for fetch with 30-second timeout
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const response = await fetch(url, { ...options, signal: options.signal || controller.signal });
+                clearTimeout(timeoutId);
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                throw error;
+            }
+        }
         const HOVER_CLEAR_MS = 200; // delay before clearing hover track on mouseout
         // Map of flight poller intervals (hex -> intervalId) used to poll /api/flight every second
         const flightPollers = new Map();
+        let pendingFlightRequests = 0;
+        const MAX_PENDING_FLIGHT_REQUESTS = 3;
         // Batch flight cache (icao -> { ts, data }) to avoid excessive UI updates
         const BATCH_FLIGHT_TTL = 5000; // 5s
         const flightsCache = new Map();
@@ -1096,9 +1421,11 @@
             const cached = aircraftInfoCache.get(key);
             if (cached && (Date.now() - cached.ts) < AIRCRAFT_CACHE_TTL) return cached.data;
             try {
-                const res = await fetch(`/api/aircraft/${encodeURIComponent(key)}`);
+                const res = await fetchWithTimeout(`/api/aircraft/${encodeURIComponent(key)}`);
                 if (!res.ok) return null;
                 const data = await res.json();
+                // Check if the response indicates an error (aircraft not found)
+                if (data && data.error) return null;
                 aircraftInfoCache.set(key, { ts: Date.now(), data });
                 return data;
             } catch (e) {
@@ -1109,7 +1436,7 @@
         // Load airline name-to-code mapping for logo lookup
         async function loadAirlineMapping() {
             try {
-                const res = await fetch('/api/airlines');
+                const res = await fetchWithTimeout('/api/airlines');
                 if (!res.ok) return;
                 const airlines = await res.json();
                 // Populate the mapping: name -> code
@@ -1125,17 +1452,17 @@
         }
 
         // Layer used to draw a hovered aircraft track (temporary)
-        let trackLayer = L.layerGroup();
-        let hoverTrackHex = null;
-
-        // Live tracks layer: short recent tracks for currently active flights
-        let liveTracksLayer = L.layerGroup();
-        try { window.liveTracksLayer = liveTracksLayer; } catch (e) {}
+        let persistentTracksLayer = L.layerGroup();
+        
+        // Add Live Tracks to the layers control
+        if (window.layersControl) {
+            window.layersControl.addOverlay(liveTracksLayer, "Live Tracks");
+        }
+        
         let liveTracksIntervalId = null;
         const LIVE_TRACKS_POLL_MS = 15000; // increased from 7s to 15s to reduce server load
 
         // Persistent tracks shown when user clicks with "Persist track on click" enabled
-        const persistentTracksLayer = L.layerGroup();
         const persistentTracks = new Map(); // hex -> LayerGroup
         try { window.persistentTracksLayer = persistentTracksLayer; window.persistentTracks = persistentTracks; } catch (e) {}
         const PERSISTENT_TRACK_TTL_MS = 120 * 60 * 1000; // 2 hours
@@ -1169,7 +1496,7 @@
         try { window.longTracksLayer = longTracksLayer; } catch (e) {}
         let longTracksIntervalId = null;
         const LONG_TRACKS_POLL_MS = 30000; // increased from 15s to 30s to reduce server load
-        const LONG_TRACKS_BATCH_SIZE = 8; // chunk size for parallel requests
+        const LONG_TRACKS_BATCH_SIZE = 32; // chunk size for parallel requests
         // Initialize persisted indicator (safe now that persistentTracks exists)
         if (typeof updatePersistedIndicator === 'function') updatePersistedIndicator();
 
@@ -1198,8 +1525,14 @@
             if (flightPollers.has(key)) return; // already polling
 
             async function pollOnce() {
+                // Limit concurrent requests to avoid backing up
+                if (pendingFlightRequests >= MAX_PENDING_FLIGHT_REQUESTS) {
+                    return;
+                }
+                
+                pendingFlightRequests++;
                 try {
-                    const res = await fetch(`/api/flight?icao=${encodeURIComponent(key)}`);
+                    const res = await fetchWithTimeout(`/api/flight?icao=${encodeURIComponent(key)}`, {}, 3000);
                     if (!res.ok) return;
                     const payload = await res.json();
                     const fl = payload && payload.flight;
@@ -1218,7 +1551,7 @@
                         } catch (e) {}
                     } catch (e) {}
                     // Update marker tooltip/popup if marker exists
-                    const marker = liveMarkers.get(key);
+                    const marker = liveMarkers.get(key)?.marker;
                     if (marker) {
                         const html = buildHoverTooltipHTML(positionObj);
                         try { const tt = marker.getTooltip && marker.getTooltip(); if (tt && tt.setContent) tt.setContent(html); }
@@ -1227,6 +1560,8 @@
                     }
                 } catch (err) {
                     // silent
+                } finally {
+                    pendingFlightRequests--;
                 }
             }
 
@@ -1250,7 +1585,7 @@
         async function fetchTracksBatch(trackRequests) {
             if (!Array.isArray(trackRequests) || trackRequests.length === 0) return [];
             try {
-                const res = await fetch('/api/v2/track', {
+                const res = await fetchWithTimeout('/api/v2/track', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ requests: trackRequests })
@@ -1286,7 +1621,7 @@
             const promises = toFetch.map(async (lk) => {
                 try {
                     const url = `${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`;
-                    const res = await fetch(url);
+                    const res = await fetchWithTimeout(url);
                     if (!res.ok) return null;
                     const payload = await res.json();
                     const sq = payload && (payload.squawk || payload.sqk || null);
@@ -1315,7 +1650,7 @@
             while ((Date.now() - start) < timeoutMs) {
                 try {
                     const apiBase = getSquawkApiBase();
-                    const res = await fetch(`${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`);
+                    const res = await fetchWithTimeout(`${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`);
                     if (res && res.ok) {
                         try {
                             const payload = await res.json();
@@ -1398,17 +1733,67 @@
         }
 
         function startLivePositionsPolling() {
-            if (liveIntervalId) return;
-            // initial run
-            fetchLivePositions();
-            liveIntervalId = setInterval(fetchLivePositions, 1000); // poll every 1 second
+            if (liveIntervalId || socket) return; // Already running
+            
+            // Try to establish socket connection first
+            try {
+                socket = io('http://localhost:3003');
+                
+                socket.on('connect', () => {
+                    console.info('Heatmap socket connected successfully');
+                    setLiveStatus('Connected (Socket)', 'success');
+                });
+                
+                socket.on('disconnect', (reason) => {
+                    console.warn('Heatmap socket disconnected:', reason);
+                    setLiveStatus('Disconnected', 'error');
+                });
+                
+                socket.on('connect_error', (err) => {
+                    console.error('Heatmap socket connect_error:', err);
+                    setLiveStatus('Connection Error', 'error');
+                    // Fall back to polling if socket fails
+                    fallbackToPolling();
+                });
+                
+                socket.on('liveUpdate', (data) => {
+                    try {
+                        // Process live update data similar to fetchLivePositions
+                        updateLivePositionsFromSocket(data);
+                    } catch (e) {
+                        console.error('Error processing socket liveUpdate:', e);
+                    }
+                });
+                
+                // Removed initial fetch to populate data - only show live positions from WebSocket
+                
+            } catch (e) {
+                console.warn('Socket.IO not available, falling back to polling:', e);
+                fallbackToPolling();
+            }
+            
             if (!map.hasLayer(liveLayer)) liveLayer.addTo(map);
+        }
+        
+        function fallbackToPolling() {
+            if (liveIntervalId) return; // Already polling
+            console.info('Falling back to polling for live positions');
+            setLiveStatus('Polling', 'warning');
+            // Start polling without initial fetch - only show live positions
+            liveIntervalId = setInterval(fetchLivePositions, 1000); // poll every 1 second
         }
 
         function stopLivePositionsPolling() {
+            // Stop polling if active
             if (liveIntervalId) {
                 clearInterval(liveIntervalId);
                 liveIntervalId = null;
+            }
+            // Disconnect socket if active
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                setLiveStatus('Disconnected', 'idle');
             }
             clearLiveLayer();
         }
@@ -1476,6 +1861,7 @@
                 }
                 // ensure the layer is on the map
                 if (!map.hasLayer(longTracksLayer)) longTracksLayer.addTo(map);
+                try { updateDebugInfo(); } catch(e) {}
             } catch (err) {
                 console.warn('Long tracks fetch/draw error', err);
             }
@@ -1585,6 +1971,7 @@
                     });
                 }
                 if (!map.hasLayer(liveTracksLayer)) liveTracksLayer.addTo(map);
+                try { updateDebugInfo(); } catch(e) {}
             } catch (err) {
                 console.warn('Live tracks fetch/draw error', err);
             }
@@ -1659,7 +2046,7 @@
                                     }
                                 } catch (e) {}
                                 flightsCache.set(lk, { ts: Date.now(), data });
-                                const marker = liveMarkers.get(lk);
+                                const marker = liveMarkers.get(lk)?.marker;
                                 if (data) {
                                     // If we have a marker and it has the stored position object, merge full flight object
                                     if (marker) {
@@ -1711,7 +2098,7 @@
                                             try {
                                                 const batchData = data || (flightsCache.get(lk) && flightsCache.get(lk).data) || {};
                                                 const aircraftCached = (aircraftInfoCache.get(lk) && aircraftInfoCache.get(lk).data) || {};
-                                                const liveData = (liveMarkers.get(lk) && liveMarkers.get(lk)._posData) || {};
+                                                const liveData = (liveMarkers.get(lk)?.marker && liveMarkers.get(lk).marker._posData) || {};
                                                 const enrich = Object.assign({}, batchData, aircraftCached, liveData, { hex: lk });
                                                 // If we have a last seen squawk, ensure it's present if not in enrich
                                                 try {
@@ -1766,7 +2153,7 @@
                                     try { lastSquawk.set(lk, sq); } catch (e) {}
                                 }
                                 try {
-                                    const marker = liveMarkers.get(lk);
+                                    const marker = liveMarkers.get(lk)?.marker;
                                     if (marker) {
                                         const pos = marker._posData || { hex: lk };
                                         pos.sqk = pos.sqk || sq;
@@ -1781,7 +2168,7 @@
                                         const lg = persistentTracks.get(lk);
                                         const batchData = flightsCache.get(lk) && flightsCache.get(lk).data ? flightsCache.get(lk).data : {};
                                         const aircraftCached = (aircraftInfoCache.get(lk) && aircraftInfoCache.get(lk).data) || {};
-                                        const liveData = (liveMarkers.get(lk) && liveMarkers.get(lk)._posData) || {};
+                                        const liveData = (liveMarkers.get(lk)?.marker && liveMarkers.get(lk).marker._posData) || {};
                                         const enrich = Object.assign({}, batchData, aircraftCached, liveData, { hex: lk });
                                         if (!enrich.sqk && !enrich.squawk) { enrich.sqk = sq; enrich.squawk = sq; }
                                         const html = buildHoverTooltipHTML(enrich);
@@ -1832,10 +2219,36 @@
             const squawk = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || p.squawk_code || (lastSquawk.has(hexKey) ? lastSquawk.get(hexKey) : '') || '';
             const reg = p.registration || p.Registration || p.reg || p.Reg || p.tail || '';
             const airline = p.airline || p.operator || p.operator_name || p.airline_name || p.airlineName || '';
-            // Altitude: accept alt, altitude, A lt variants, or max_alt_ft from batch
-            const rawAlt = (p.alt ?? p.altitude ?? p.Alt ?? p.Altitude ?? p.max_alt_ft ?? p.max_alt ?? p.alt_ft ?? '');
-            const altNum = Number(rawAlt);
-            const alt = (rawAlt !== '' && rawAlt != null && Number.isFinite(altNum)) ? `${altNum.toLocaleString()} ft` : (rawAlt || '');
+            // Altitude: accept many variants and convert meters to feet where provided
+            let altVal = null;
+            if (p.alt !== undefined) altVal = p.alt;
+            else if (p.altitude !== undefined) altVal = p.altitude;
+            else if (p.Alt !== undefined) altVal = p.Alt;
+            else if (p.Altitude !== undefined) altVal = p.Altitude;
+            else if (p.altitude_ft !== undefined) altVal = p.altitude_ft;
+            else if (p.max_alt_ft !== undefined) altVal = p.max_alt_ft;
+            else if (p.max_alt !== undefined) altVal = p.max_alt;
+            else if (p.alt_ft !== undefined) altVal = p.alt_ft;
+            else if (p.alt_baro !== undefined) altVal = p.alt_baro;
+            else if (p.altitude_m !== undefined) altVal = Number(p.altitude_m) * 3.28084;
+            else if (p.alt_m !== undefined) altVal = Number(p.alt_m) * 3.28084;
+            else altVal = '';
+            const altNum = Number(altVal);
+            let alt = '';
+            if (Number.isFinite(altNum)) {
+                alt = `${Math.round(altNum).toLocaleString()} ft`;
+            } else if (typeof altVal === 'string' && altVal.trim() !== '') {
+                const fl = altVal.trim().match(/^FL(\d+)$/i);
+                if (fl && fl[1]) {
+                    const flFeet = Number(fl[1]) * 100;
+                    if (Number.isFinite(flFeet)) alt = `${flFeet.toLocaleString()} ft`;
+                    else alt = altVal.trim();
+                } else {
+                    alt = altVal.trim();
+                }
+            } else {
+                alt = '';
+            }
 
             // Calculate vertical rate for color coding
             let verticalRate = 0;
@@ -1861,15 +2274,25 @@
             const speedNum = Number(rawSpeed);
             const speed = (rawSpeed !== '' && rawSpeed != null && Number.isFinite(speedNum)) ? `${speedNum.toLocaleString()} kt` : (rawSpeed || '');
             // Track/heading fallbacks
-            const trackVal = (typeof p.track === 'number' ? p.track : (typeof p.heading === 'number' ? p.heading : (typeof p.course === 'number' ? p.course : (typeof p.true_track === 'number' ? p.true_track : ''))));
-            const track = (trackVal !== '' && trackVal != null) ? trackVal : '';
+            const track = p.heading || p.track || p.course || p.true_track || '';
             const lat = (p.lat || p.latitude || p.Lat) || '';
             const lon = (p.lon || p.longitude || p.Lon) || '';
-            // Calculate age in seconds since last update
-            const timeStr = p.timestamp ? (() => {
-                const timestamp = isNaN(Number(p.timestamp)) ? new Date(p.timestamp).getTime() : Number(p.timestamp);
-                const ageSeconds = Math.floor((Date.now() - timestamp) / 1000);
-                return ageSeconds >= 0 ? `${ageSeconds}s ago` : '—';
+            // Calculate age in seconds since last update (support many timestamp fields and seconds/ms formats)
+            function normalizeTimestamp(v) {
+                if (v === undefined || v === null || v === '') return null;
+                if (typeof v === 'number') return (v < 1e11) ? v * 1000 : v;
+                const nv = Number(v);
+                if (!Number.isNaN(nv)) return (nv < 1e11) ? nv * 1000 : nv;
+                const parsed = Date.parse(v);
+                if (!Number.isNaN(parsed)) return parsed;
+                return null;
+            }
+            const tsCandidate = (p.timestamp ?? p.ts ?? p.time ?? p.time_ts ?? p.time_utc ?? p.lastSeen ?? p.last_seen ?? p.t) || null;
+            const tsMs = normalizeTimestamp(tsCandidate);
+            const timeStr = (tsMs && Number.isFinite(tsMs)) ? (() => {
+                const ageSeconds = Math.floor((Date.now() - tsMs) / 1000);
+                if (ageSeconds < 0 || ageSeconds > (5 * 365 * 24 * 3600)) return '—';
+                return `${ageSeconds}s ago`;
             })() : '—';
             // Aircraft type
             const aircraftType = p.type || p.aircraft_type || p.t || p.TPE || '';
@@ -1920,7 +2343,31 @@
             if (trackFetchPromises.has(key)) return trackFetchPromises.get(key);
 
             const promise = (async () => {
-                const res = await fetch(`/api/track?hex=${encodeURIComponent(hex)}&minutes=${minutes}`);
+                // Use track cache service for last 15 minutes (900 seconds)
+                if (minutes <= 15) {
+                    try {
+                        const res = await fetchWithTimeout(`/api/track-cache/track/${encodeURIComponent(hex)}`);
+                        if (res.ok) {
+                            const payload = await res.json();
+                            const pts = (payload.positions || []).map(t => ({
+                                lat: t.lat,
+                                lon: t.lon,
+                                alt: t.altitude || null
+                            }));
+                            trackCache.set(key, { ts: Date.now(), data: pts });
+                            setTimeout(() => {
+                                const e = trackCache.get(key);
+                                if (e && ((Date.now() - e.ts) >= TRACK_CACHE_TTL_MS)) trackCache.delete(key);
+                            }, TRACK_CACHE_TTL_MS + 500);
+                            return { points: pts, cached: false };
+                        }
+                    } catch (err) {
+                        // Fall through to regular API if cache fails
+                    }
+                }
+                
+                // Fallback to regular track API for longer periods or if cache fails
+                const res = await fetchWithTimeout(`/api/track?hex=${encodeURIComponent(hex)}&minutes=${minutes}`);
                 if (!res.ok) throw new Error(`Track API ${res.status}`);
                 const payload = await res.json();
                 // Normalize track points: accept several common field names and include altitude when available.
@@ -1959,6 +2406,20 @@
             });
             persistentTracks.clear();
             updatePersistedIndicator();
+        }
+
+        function togglePersistentTracks() {
+            const persistentTracksEnabled = document.getElementById('toggle-persistent-tracks').checked;
+            
+            if (persistentTracksEnabled) {
+                if (!window.map.hasLayer(persistentTracksLayer)) {
+                    window.map.addLayer(persistentTracksLayer);
+                }
+            } else {
+                if (window.map.hasLayer(persistentTracksLayer)) {
+                    window.map.removeLayer(persistentTracksLayer);
+                }
+            }
         }
 
         function updatePersistedIndicator() {
@@ -2009,7 +2470,7 @@
             if (window.debugDumpEnabled) {
                 // Add full JSON dumps for marker._posData, flightsCache, aircraftInfoCache
                 try {
-                    const marker = liveMarkers.get(k);
+                    const marker = liveMarkers.get(k)?.marker;
                     const markerData = marker && marker._posData ? marker._posData : null;
                     const flightCacheData = flightsCache.get(k) ? flightsCache.get(k).data : null;
                     const aircraftCacheData = aircraftInfoCache.get(k) ? aircraftInfoCache.get(k).data : null;
@@ -2137,181 +2598,6 @@
             });
         }
 
-        // Compute icon rotation so the nose points along the track
-        function iconRotationFromTrack(track) {
-            const t = (typeof track === 'number' && !isNaN(track)) ? Number(track) : 0;
-            return t;
-        }
-
-        // Aircraft icon mappings from dump1090-fa
-        const TypeDesignatorIcons = {
-            'A10': 'hi_perf', 'A148': 'hi_perf', 'A21N': 'airliner', 'A225': 'heavy_4e', 'A3': 'hi_perf', 'A359': 'airliner',
-            'A37': 'jet_nonswept', 'A388': 'heavy_4e', 'A5': 'cessna', 'A6': 'hi_perf', 'A700': 'jet_nonswept', 'AC80': 'twin_small', 'AC90': 'twin_small',
-            'AC95': 'twin_small', 'AJ27': 'jet_nonswept', 'AJET': 'hi_perf', 'AN28': 'twin_small', 'ARCE': 'hi_perf',
-            'AT3': 'hi_perf', 'ATG1': 'jet_nonswept', 'B18T': 'twin_small', 'B190': 'twin_small', 'B25': 'twin_large',
-            'B350': 'twin_small', 'B52': 'heavy_4e', 'B712': 'jet_swept', 'B721': 'airliner', 'B722': 'airliner',
-            'B738': 'airliner', 'B763': 'airliner', 'B77W': 'heavy_2e', 'BALL': 'balloon', 'BE10': 'twin_small', 'BE20': 'twin_small', 'BE30': 'twin_small', 'BE32': 'twin_small',
-            'BE40': 'jet_nonswept', 'BE99': 'twin_small', 'BE9L': 'twin_small', 'BE9T': 'twin_small', 'BN2T': 'twin_small',
-            'BPOD': 'jet_swept', 'BU20': 'twin_small', 'C08T': 'jet_swept', 'C125': 'twin_small', 'C212': 'twin_small',
-            'C21T': 'twin_small', 'C22J': 'jet_nonswept', 'C25A': 'jet_nonswept', 'C25B': 'jet_nonswept', 'C25C': 'jet_nonswept',
-            'C25D': 'jet_nonswept', 'C441': 'jet_swept', 'C500': 'jet_nonswept', 'C501': 'jet_nonswept', 'C510': 'jet_nonswept',
-            'C525': 'jet_nonswept', 'C550': 'jet_nonswept', 'C560': 'jet_nonswept', 'C56X': 'jet_nonswept', 'C650': 'jet_swept',
-            'C680': 'jet_swept', 'C750': 'jet_swept', 'CL30': 'jet_swept', 'CL35': 'jet_swept', 'CL60': 'jet_swept',
-            'CL85': 'jet_swept', 'CN35': 'jet_swept', 'CRJ1': 'jet_swept', 'CRJ2': 'jet_swept', 'CRJ7': 'jet_swept',
-            'CRJ9': 'jet_swept', 'CRJX': 'jet_swept', 'CVLP': 'twin_large', 'D228': 'twin_small', 'DA36': 'hi_perf',
-            'DA50': 'airliner', 'DC10': 'heavy_2e', 'DC3': 'twin_large', 'DC3S': 'twin_large', 'DHA3': 'twin_small',
-            'DHC6': 'twin_small', 'DLH2': 'hi_perf', 'E110': 'twin_small', 'E135': 'jet_swept', 'E145': 'jet_swept',
-            'E29E': 'hi_perf', 'E45X': 'jet_swept', 'E500': 'jet_nonswept', 'E50P': 'jet_nonswept', 'E545': 'jet_swept',
-            'E55P': 'jet_nonswept', 'EA50': 'jet_nonswept', 'EFAN': 'jet_nonswept', 'EFUS': 'hi_perf', 'ELIT': 'jet_nonswept',
-            'EUFI': 'hi_perf', 'F1': 'hi_perf', 'F100': 'jet_swept', 'F111': 'hi_perf', 'F117': 'hi_perf', 'F14': 'hi_perf',
-            'F15': 'hi_perf', 'F22': 'hi_perf', 'F2TH': 'jet_swept', 'F4': 'hi_perf', 'F406': 'twin_small', 'F5': 'hi_perf',
-            'F50': 'twin_large', 'F70': 'twin_large', 'FA10': 'hi_perf', 'FA20': 'hi_perf', 'FA50': 'hi_perf', 'FA7X': 'hi_perf',
-            'FJET': 'jet_nonswept', 'G115': 'twin_small', 'G120': 'twin_small', 'G150': 'jet_nonswept', 'G159': 'jet_nonswept',
-            'G200': 'jet_nonswept', 'G280': 'jet_nonswept', 'G3': 'jet_nonswept', 'G4': 'jet_nonswept', 'G450': 'jet_nonswept',
-            'G5': 'jet_nonswept', 'G550': 'jet_nonswept', 'G650': 'jet_swept', 'GALX': 'jet_swept', 'GL5T': 'jet_swept',
-            'GLF2': 'jet_nonswept', 'GLF3': 'jet_nonswept', 'GLF4': 'jet_nonswept', 'GLF5': 'jet_nonswept', 'GLF6': 'jet_swept',
-            'H25A': 'jet_swept', 'H25B': 'jet_swept', 'H25C': 'jet_swept', 'HA4T': 'airliner', 'HDJT': 'jet_nonswept',
-            'HERN': 'jet_swept', 'J8A': 'hi_perf', 'J8B': 'hi_perf', 'JH7': 'hi_perf', 'JS31': 'twin_small', 'JS32': 'twin_small',
-            'JU52': 'twin_small', 'L101': 'heavy_2e', 'LAE1': 'hi_perf', 'LEOP': 'jet_nonswept', 'LJ23': 'jet_nonswept',
-            'LJ24': 'jet_nonswept', 'LJ25': 'jet_nonswept', 'LJ28': 'jet_nonswept', 'LJ31': 'jet_nonswept', 'LJ35': 'jet_nonswept',
-            'LJ45': 'jet_nonswept', 'LJ55': 'jet_nonswept', 'LJ60': 'jet_nonswept', 'LJ75': 'jet_swept', 'LJ85': 'jet_swept',
-            'M20P': 'twin_small', 'M7': 'hi_perf', 'MD11': 'heavy_2e', 'MD81': 'airliner', 'MD82': 'airliner', 'MD83': 'airliner',
-            'MD87': 'airliner', 'MD88': 'airliner', 'MD90': 'airliner', 'MU2': 'twin_small', 'MU30': 'twin_small', 'N262': 'twin_small',
-            'P180': 'twin_small', 'P28A': 'cessna', 'P28B': 'cessna', 'P28R': 'cessna', 'P28S': 'cessna', 'P28T': 'cessna',
-            'P28U': 'cessna', 'P32R': 'cessna', 'P32T': 'cessna', 'P46T': 'twin_small', 'PA23': 'twin_small', 'PA24': 'twin_small',
-            'PA25': 'twin_small', 'PA27': 'twin_small', 'PA30': 'twin_small', 'PA31': 'twin_small', 'PA32': 'twin_small',
-            'PA34': 'twin_small', 'PA44': 'twin_small', 'PA46': 'twin_small', 'PC12': 'twin_small', 'PC6T': 'twin_small',
-            'PC9': 'twin_small', 'PRM1': 'jet_nonswept', 'R22': 'helicopter', 'R44': 'helicopter', 'RJ1H': 'jet_swept',
-            'RJ70': 'jet_swept', 'RJ85': 'jet_swept', 'RJ100': 'jet_swept', 'S3': 'hi_perf', 'S37': 'jet_nonswept',
-            'S601': 'jet_nonswept', 'SATA': 'jet_nonswept', 'SB05': 'jet_nonswept', 'SC7': 'twin_small', 'SF50': 'jet_nonswept',
-            'SJ30': 'jet_nonswept', 'SLCH': 'heavy_4e', 'SM60': 'twin_small', 'SOL1': 'jet_swept', 'SOL2': 'jet_swept',
-            'SP33': 'jet_nonswept', 'SR71': 'hi_perf', 'SS2': 'hi_perf', 'SU15': 'hi_perf', 'SU24': 'hi_perf', 'SU25': 'hi_perf',
-            'SU27': 'hi_perf', 'SW2': 'twin_small', 'SW3': 'twin_small', 'SW4': 'twin_small', 'T154': 'airliner', 'T2': 'jet_nonswept',
-            'T22M': 'hi_perf', 'T37': 'jet_nonswept', 'T38': 'jet_nonswept', 'T4': 'hi_perf', 'TJET': 'jet_nonswept', 'TOR': 'hi_perf',
-            'TRIM': 'twin_small', 'TRIS': 'twin_small', 'TRMA': 'twin_small', 'TU22': 'hi_perf', 'VAUT': 'hi_perf', 'Y130': 'hi_perf',
-            'Y141': 'airliner', 'YK28': 'hi_perf', 'YK38': 'airliner', 'YK40': 'airliner', 'YK42': 'airliner', 'YURO': 'hi_perf'
-        };
-
-        const TypeDescriptionIcons = {
-            'H': 'helicopter',
-            'L1P': 'cessna', 'L1T': 'cessna', 'L1J': 'hi_perf',
-            'L2P': 'twin_small', 'L2T': 'twin_large',
-            'L2J-L': 'jet_swept', 'L2J-M': 'airliner', 'L2J-H': 'heavy_2e',
-            'L3J-L': 'jet_swept', 'L3J-M': 'airliner', 'L3J-H': 'heavy_2e',
-            'L4J-L': 'jet_swept', 'L4J-M': 'airliner', 'L4J-H': 'heavy_4e',
-            'L2J-M': 'airliner', 'L2J-H': 'heavy_2e',
-            'L4T': 'heavy_4e', 'L4J-H': 'heavy_4e'
-        };
-
-        const CategoryIcons = {
-            'A1': 'cessna', 'A2': 'jet_nonswept', 'A3': 'airliner', 'A4': 'heavy_2e', 'A5': 'heavy_4e', 'A6': 'hi_perf', 'A7': 'helicopter',
-            'B1': 'cessna', 'B2': 'balloon', 'B4': 'cessna', 'B7': 'hi_perf',
-            'C0': 'ground_unknown', 'C1': 'ground_emergency', 'C2': 'ground_service', 'C3': 'ground_fixed', 'C4': 'ground_fixed', 'C5': 'ground_fixed', 'C6': 'ground_unknown', 'C7': 'ground_unknown'
-        };
-
-        // Function to get icon name for aircraft based on type
-        function getIconForAircraft(info) {
-            // Try type designator first (most specific)
-            if (info.typecode && TypeDesignatorIcons[info.typecode]) {
-                return TypeDesignatorIcons[info.typecode];
-            }
-
-            // Try category
-            if (info.category && CategoryIcons[info.category]) {
-                return CategoryIcons[info.category];
-            }
-
-            // Try type description
-            if (info.type_description && TypeDescriptionIcons[info.type_description]) {
-                return TypeDescriptionIcons[info.type_description];
-            }
-
-            // Default to generic aircraft icon
-            return 'aircraft';
-        }
-
-        // Create an aircraft logo icon (image) using known aircraft info.
-        // `info` may contain `manufacturerLogo` (relative URL) or `manufacturer`/`aircraft_model`.
-        function createAircraftLogoIcon(info = {}, rotation = 0, size = 50, verticalRate = 0) {
-            // Enforce minimum size of 50x50 pixels
-            const finalSize = Math.max(size, 50);
-
-            // Determine color filter based on vertical rate (feet per minute)
-            let colorFilter = 'none'; // default no filter
-            if (verticalRate > 500) {
-                colorFilter = 'sepia(1) hue-rotate(90deg) saturate(2)'; // green for climbing
-            } else if (verticalRate < -300) {
-                colorFilter = 'sepia(1) hue-rotate(-50deg) saturate(2)'; // red for descending
-            }
-
-            // Determine image source - use only aircraft type icons
-            let src = null;
-            try {
-                // Use aircraft type icons only
-                const icon = getIconForAircraft(info);
-                if (icon && icon !== 'aircraft') {
-                    src = `/icons/${icon}.svg`;
-                } else {
-                    // Fallback to generic aircraft icon
-                    src = `/icons/aircraft.svg`;
-                }
-            } catch (e) {}
-            // Create image element with color filter applied
-            const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${finalSize}px;height:${finalSize}px;object-fit:contain;display:block;border-radius:3px;border:1px solid rgba(255,255,255,0.3);filter: ${colorFilter};"/>` : `<svg xmlns="http://www.w3.org/2000/svg" width="${finalSize}" height="${finalSize}" viewBox="0 0 36 36">
-                <defs>
-                    <linearGradient id="aircraftFillGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" style="stop-color:#ff3300;stop-opacity:1" />
-                        <stop offset="50%" style="stop-color:#ff3300;stop-opacity:0.9" />
-                        <stop offset="100%" style="stop-color:#ff3300;stop-opacity:0.7" />
-                    </linearGradient>
-                    <linearGradient id="wingGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" style="stop-color:#f0f0f0;stop-opacity:1" />
-                        <stop offset="100%" style="stop-color:#cccccc;stop-opacity:1" />
-                    </linearGradient>
-                </defs>
-
-                <!-- Main fuselage/body -->
-                <ellipse cx="18" cy="18" rx="4.5" ry="14" fill="url(#aircraftFillGradient)" stroke="#ffffff" stroke-width="0.8"/>
-
-                <!-- Wings (main) -->
-                <rect x="6" y="16.5" width="24" height="3" rx="1" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.5"/>
-                <rect x="7" y="17" width="22" height="2" rx="0.5" fill="#ff3300" opacity="0.9"/>
-
-                <!-- Tail section -->
-                <rect x="16" y="4" width="4" height="8" rx="0.5" fill="url(#aircraftFillGradient)" stroke="#ffffff" stroke-width="0.5"/>
-                <rect x="16.5" y="4.5" width="3" height="7" rx="0.3" fill="#ff3300" opacity="0.8"/>
-
-                <!-- Vertical stabilizer -->
-                <rect x="17.2" y="2" width="1.6" height="6" rx="0.2" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.3"/>
-                <rect x="17.4" y="2.2" width="1.2" height="5.6" rx="0.1" fill="#ff3300" opacity="0.9"/>
-
-                <!-- Horizontal stabilizers -->
-                <rect x="14" y="5" width="8" height="2" rx="0.3" fill="url(#wingGradient)" stroke="#ffffff" stroke-width="0.3"/>
-                <rect x="14.5" y="5.2" width="7" height="1.6" rx="0.2" fill="#ff3300" opacity="0.8"/>
-
-                <!-- Engines (turbofan style) -->
-                <circle cx="9" cy="18" r="2" fill="#333333" stroke="#ffffff" stroke-width="0.3"/>
-                <circle cx="9" cy="18" r="1.2" fill="#666666"/>
-                <circle cx="27" cy="18" r="2" fill="#333333" stroke="#ffffff" stroke-width="0.3"/>
-                <circle cx="27" cy="18" r="1.2" fill="#666666"/>
-
-                <!-- Cockpit windows -->
-                <rect x="16" y="7" width="4" height="3" rx="2" fill="#87ceeb" opacity="0.8" stroke="#ffffff" stroke-width="0.2"/>
-                <rect x="16.5" y="7.5" width="3" height="2" rx="1.5" fill="#4682b4" opacity="0.6"/>
-
-                <!-- Wing flaps/ailerons (subtle) -->
-                <rect x="8" y="19.5" width="4" height="1" rx="0.2" fill="#666666" opacity="0.7"/>
-                <rect x="24" y="19.5" width="4" height="1" rx="0.2" fill="#666666" opacity="0.7"/>
-
-                <!-- Landing gear doors (subtle) -->
-                <rect x="12" y="30" width="2" height="1.5" rx="0.3" fill="#666666" opacity="0.5"/>
-                <rect x="22" y="30" width="2" height="1.5" rx="0.3" fill="#666666" opacity="0.5"/>
-            </svg>`;
-
-            const html = `<div style="transform: rotate(${rotation}deg); width: ${finalSize}px; height:${finalSize}px; display:flex; align-items:center; justify-content:center">${imgHtml}</div>`;
-            return L.divIcon({ html, className: 'aircraft-logo-icon', iconSize: [finalSize, finalSize], iconAnchor: [finalSize/2, finalSize/2] });
-        }
-
         // Add minimal CSS for aircraft icons
         const style = document.createElement('style');
         style.innerHTML = `
@@ -2387,7 +2673,7 @@
                 // Live positions are always enabled, so always use a short window (1 hour) for live marker polling
                 hours = 1;
                 // Fetch live positions from backend `/api/positions` using selected time window
-                const res = await fetch(`/api/positions?hours=${hours}`);
+                const res = await fetchWithTimeout(`/api/positions?hours=${hours}`);
                 if (!res.ok) throw new Error(`Positions API error: ${res.status}`);
                 const payload = await res.json();
                 // Server returns { aircraftCount, positions } — normalize to an array
@@ -2399,7 +2685,7 @@
                 // the live track (tail) can be drawn without showing long historical
                 // data. Use a short recency window (90 seconds) to determine "live".
                 try {
-                    const RECENT_MS = 90 * 1000; // 90 seconds
+                    const RECENT_MS = 10 * 1000; // 10 seconds - only truly live aircraft
                     const nowTs = Date.now();
                     const positionsByHex = new Map();
                     positions.forEach(p => {
@@ -2416,8 +2702,10 @@
                         arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
                         const latest = arr[0];
                         if (!latest) continue;
-                        // Only include aircraft seen within RECENT_MS
-                        if ((latest.timestamp || nowTs) < (nowTs - RECENT_MS)) continue;
+                        
+                        // Only apply recency filtering for small time windows (1 hour or less)
+                        // For historical views, show all aircraft regardless of when they were last seen
+                        if (hours <= 1 && (latest.timestamp || nowTs) < (nowTs - RECENT_MS)) continue;
 
                         // Seed short trail points (chronological order) from most recent
                         try {
@@ -2450,7 +2738,7 @@
                     });
                     if (needed.length > 0) {
                         // POST { icao24: [...] } expected by server
-                        const batchRes = await fetch('/api/aircraft/batch', {
+                        const batchRes = await fetchWithTimeout('/api/aircraft/batch', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ icao24: needed })
@@ -2473,428 +2761,9 @@
                     console.warn('Batch aircraft lookup failed', err);
                 }
 
-                // Update live layer contents: update existing markers in-place for smooth movement
-                const seenHexes = new Set();
-                positions.forEach(p => {
-                    const lat = p.lat ?? p.Latitude ?? p.latitude;
-                    const lon = p.lon ?? p.Longitude ?? p.longitude;
-                    if (typeof lat !== 'number' || typeof lon !== 'number') return;
-                    const hex = (p.hex || '').toLowerCase();
-                    seenHexes.add(hex);
-
-                    // Calculate vertical rate for color coding (used for both new and existing markers)
-                    let verticalRate = 0;
-                    try {
-                        const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
-                        if (alt !== null && typeof alt === 'number') {
-                            const now = Date.now();
-                            const prevData = verticalRateCache.get(hex);
-                            if (prevData) {
-                                const timeDiff = (now - prevData.timestamp) / 1000; // seconds
-                                if (timeDiff > 30 && timeDiff < 300) { // between 30 seconds and 5 minutes
-                                    const altDiff = alt - prevData.altitude; // feet
-                                    verticalRate = (altDiff / timeDiff) * 60; // feet per minute
-                                }
-                            }
-                            // Update cache
-                            verticalRateCache.set(hex, { altitude: alt, timestamp: now });
-                        }
-                    } catch (e) {}
-
-                    // Merge cached aircraft info into position object for tooltip/popups
-                    try {
-                        const cachedInfo = aircraftInfoCache.get(hex);
-                        if (cachedInfo && cachedInfo.data) {
-                            const info = cachedInfo.data;
-                            p.registration = p.registration || info.registration || info.reg || info.tail || p.registration;
-                            p.airline = p.airline || info.operator || info.airline || info.operator_name || p.airline;
-                        }
-                    } catch (e) {}
-
-                    // Record any squawk we saw for this hex so it can be used by persisted tracks
-                    try {
-                        const s = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || null;
-                        if (s) lastSquawk.set(hex, s);
-                    } catch (e) {}
-
-                    // Calculate rotation if heading/track is available
-                    const rot = (typeof p.track === 'number' && !isNaN(p.track)) ? p.track : (typeof p.heading === 'number' ? p.heading : 0);
-
-                    // If there's an existing marker, move it smoothly by setting its position and updating icon
-                    if (liveMarkers.has(hex)) {
-                        const existing = liveMarkers.get(hex);
-                        try {
-                            // Merge live position with any existing enriched data so we don't lose batch-enriched fields
-                            try {
-                                // detect previous squawk and track for change indicators
-                                const prevSqk = existing._posData && (existing._posData.sqk || existing._posData.squawk) ? (existing._posData.sqk || existing._posData.squawk) : null;
-                                const prevTrack = existing._posData && typeof existing._posData.track === 'number' ? existing._posData.track : (existing._posData && existing._posData.track ? Number(existing._posData.track) : null);
-
-                                const merged = Object.assign({}, existing._posData || {}, p);
-                                try {
-                                    if (!merged.sqk && !merged.squawk && lastSquawk.has(hex)) {
-                                        const v = lastSquawk.get(hex);
-                                        merged.sqk = v;
-                                        merged.squawk = merged.squawk || v;
-                                    }
-                                } catch (e) {}
-                                existing._posData = merged;
-
-                                // squawk changed? show a transient yellow marker at current position
-                                try {
-                                    const newSqk = merged.sqk || merged.squawk || null;
-                                    if (prevSqk && newSqk && prevSqk !== newSqk) {
-                                        try { showTransientMarker(existing.getLatLng(), 'yellow', 4000, 6); } catch (e) {}
-                                    }
-                                } catch (e) {}
-
-                                // track changed significantly? show a transient blue marker
-                                try {
-                                    const newTrack = (typeof merged.track === 'number' && !isNaN(merged.track)) ? merged.track : (merged.track ? Number(merged.track) : null);
-                                    if (prevTrack !== null && newTrack !== null && Math.abs(newTrack - prevTrack) > 5) {
-                                        try { showTransientMarker(existing.getLatLng(), 'blue', 15000, 5); } catch (e) {}
-                                    }
-                                } catch (e) {}
-
-                                try { console.debug('Live: merged marker._posData for', hex, merged); } catch (e) {}
-                            } catch (e) {
-                                existing._posData = p;
-                                try { console.debug('Live: set marker._posData (no merge) for', hex, p); } catch (e) {}
-                            }
-                            const oldLatLng = existing.getLatLng ? existing.getLatLng() : null;
-                            existing.setLatLng([lat, lon]);
-                            // update icon rotation by modifying the existing DOM element rather than recreating the icon
-                            const el = (existing.getElement && existing.getElement()) || existing._icon;
-                            if (el) {
-                                // our createAircraftIcon wraps the svg in a div, update its transform
-                                const inner = el.querySelector && el.querySelector('div');
-                                if (inner) inner.style.transform = `rotate(${rot || 0}deg)`;
-                            }
-
-                            // Update icon color based on vertical rate change
-                            try {
-                                const prevVerticalRate = existing._verticalRate || 0;
-                                if (Math.abs(verticalRate - prevVerticalRate) > 100) { // significant change
-                                    const aircraftInfo = {
-                                        manufacturer: p.manufacturer || p.airline || null,
-                                        typecode: p.aircraft_type || null
-                                    };
-                                    const newIcon = createAircraftLogoIcon(aircraftInfo, rot || 0, 50, verticalRate);
-                                    existing.setIcon(newIcon);
-                                    existing._verticalRate = verticalRate;
-                                }
-                            } catch (e) {
-                                // ignore icon update errors
-                            }
-
-                            // update tooltip content from merged marker._posData (preserve batch-enriched fields)
-                            const tooltipHtml = buildHoverTooltipHTML(existing._posData || p);
-                            try {
-                                const tt = existing.getTooltip && existing.getTooltip();
-                                if (tt && tt.setContent) {
-                                    tt.setContent(tooltipHtml);
-                                    try { console.debug('Live: updated tooltip for', hex); } catch (e) {}
-                                } else {
-                                    existing.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
-                                    try { console.debug('Live: bound tooltip for', hex); } catch (e) {}
-                                }
-                            } catch (e) {
-                                // ignore tooltip update errors
-                            }
-
-                            // update popup content as well
-                            try {
-                                const popup = existing.getPopup && existing.getPopup();
-                                if (popup && popup.setContent) {
-                                    popup.setContent(tooltipHtml);
-                                    try { console.debug('Live: updated popup for', hex); } catch (e) {}
-                                }
-                            } catch (e) {}
-
-                            // Maintain last N valid positions for this hex and draw a short tail
-                            try {
-                                const arr = lastPositions.get(hex) || [];
-                                const last = arr.length ? arr[arr.length - 1] : null;
-                                // push only if position changed
-                                if (!last || last[0] !== lat || last[1] !== lon) {
-                                    arr.push([lat, lon]);
-                                    if (arr.length > LAST_POSITIONS_COUNT) arr.splice(0, arr.length - LAST_POSITIONS_COUNT);
-                                    lastPositions.set(hex, arr);
-                                }
-
-                                const pts = (lastPositions.get(hex) || []).slice();
-                                if (pts.length >= 2) {
-                                    if (liveTrails.has(hex)) {
-                                        const tr = liveTrails.get(hex);
-                                        try { tr.setLatLngs(pts); } catch (e) {}
-                                    } else {
-                                        const tr = L.polyline(pts, { color: '#00ffff', weight: 2, opacity: 0.7, pane: 'livePane', interactive: false });
-                                        liveTrails.set(hex, tr);
-                                        liveLayer.addLayer(tr);
-                                    }
-                                } else {
-                                    // remove any existing short trail if we don't have at least two points
-                                    if (liveTrails.has(hex)) {
-                                        const tr = liveTrails.get(hex);
-                                        try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
-                                        liveTrails.delete(hex);
-                                    }
-                                }
-
-                                // Compute bearing using the last two valid positions if track not provided
-                                try {
-                                    const mp = existing._posData || {};
-                                    if ((!mp.track && typeof mp.track !== 'number') || mp.track === '') {
-                                        const curPts = lastPositions.get(hex) || [];
-                                        if (curPts.length >= 2) {
-                                            const a = curPts[curPts.length - 2];
-                                            const b = curPts[curPts.length - 1];
-                                            const bng = computeBearing(a[0], a[1], b[0], b[1]);
-                                            if (bng != null) {
-                                                try { mp.track = bng; existing._posData = mp; } catch (e) {}
-                                                try { console.debug('Live: computed track for', hex, bng); } catch (e) {}
-                                            }
-                                        }
-                                    }
-                                } catch (e) {}
-                            } catch (e) {}
-                        } catch (e) {
-                            console.warn('Failed to update marker for', hex, e);
-                        }
-                        return;
-                    }
-
-                    // Otherwise create new marker and add to layer
-                    // Try to use logo icon if manufacturer info is available, otherwise use SVG icon
-                    let icon;
-                    try {
-                        const aircraftInfo = {
-                            manufacturer: p.manufacturer || p.airline || null,
-                            typecode: p.aircraft_type || null
-                        };
-                        if (aircraftInfo.manufacturer || aircraftInfo.typecode) {
-                            icon = createAircraftLogoIcon(aircraftInfo, rot || 0, 50, verticalRate);
-                        } else {
-                            // Determine color based on vertical rate for fallback icon
-                            let fallbackColor = '#ff3300'; // default orange
-                            if (verticalRate > 500) {
-                                fallbackColor = '#00ff00'; // green for climbing
-                            } else if (verticalRate < -300) {
-                                fallbackColor = '#ff0000'; // red for descending
-                            }
-                            icon = createAircraftIcon(fallbackColor, 50, rot || 0);
-                        }
-                    } catch (e) {
-                        // Fallback to SVG icon if logo creation fails
-                        let fallbackColor = '#ff3300'; // default orange
-                        if (verticalRate > 500) {
-                            fallbackColor = '#00ff00'; // green for climbing
-                        } else if (verticalRate < -300) {
-                            fallbackColor = '#ff0000'; // red for descending
-                        }
-                        icon = createAircraftIcon(fallbackColor, 50, rot || 0);
-                    }
-                    const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
-
-                    // Tooltip shown on hover (richer HTML)
-                    const tooltipHtml = buildHoverTooltipHTML(p);
-                    marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
-
-                    // Ensure initial posData includes squawk fallback and seed recent positions
-                    try {
-                        const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
-                        if (v) { p.sqk = v; p.squawk = p.squawk || v; }
-                        else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
-                    } catch (e) {}
-                    try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
-
-                    // If registration/airline missing, try fetching from server aircraft DB
-                    (async () => {
-                            try {
-                                const info = await fetchAircraftInfo(hex);
-                                if (info) {
-                                    // merge fields onto p for tooltip generation
-                                    p.registration = p.registration || info.registration || info.reg || info.tail || p.registration;
-                                    p.airline = p.airline || info.operator || info.airline || info.operator_name || p.airline;
-                                }
-                            } catch (e) {}
-                            // ensure marker._posData is up-to-date and remember squawk
-                            try {
-                                marker._posData = p;
-                                const s = p.sqk || p.squawk || p.SQK || p.Squawk || null;
-                                try { if (s) lastSquawk.set(hex, s); } catch (e) {}
-                                const newHtml = buildHoverTooltipHTML(p);
-                                try { if (marker.getTooltip && marker.getTooltip().setContent) marker.getTooltip().setContent(newHtml); else marker.bindTooltip(newHtml, { direction: 'top', offset: [0, -10], sticky: true }); } catch (e) {}
-                                try { if (marker.getPopup && marker.getPopup().setContent) marker.getPopup().setContent(newHtml); } catch (e) {}
-                            } catch (e) {}
-                    })();
-
-                    // On hover, fetch (with cache/debounce) and display recent track for this aircraft
-                    marker.on('mouseover', (ev) => {
-                        try {
-                            if (!hex) return;
-                            // cancel any pending clear
-                            if (hoverClearTimer) { clearTimeout(hoverClearTimer); hoverClearTimer = null; }
-                            // debounce actual fetch/draw to avoid rapid requests when moving across markers
-                            if (hoverFetchTimer) clearTimeout(hoverFetchTimer);
-                            hoverFetchTimer = setTimeout(async () => {
-                                try {
-                                    if (!hex) return;
-                                    if (hoverTrackHex === hex) return;
-                                    hoverTrackHex = hex;
-                                    try { updateDebugPanel(hex); } catch (e) {}
-                                    // Clear any previous hover-only track
-                                    trackLayer.clearLayers();
-                                    longTracksLayer.clearLayers();
-
-                                    // Use the UI-selected track window (minutes)
-                                    const minutesElem = document.getElementById('track-window-input');
-                                    const minutes = minutesElem ? parseInt(minutesElem.value, 10) || 1 : 1;
-                                    setTrackStatus('Fetching...', 'loading');
-
-                                    try {
-                                        const { points, cached } = await fetchTrackWithCache(hex, minutes);
-                                        if (points.length > 0) {
-                                                    // compute color based on altitude change if available: green for climb, red for descent, yellow for static
-                                                    let color = 'yellow'; // Default to yellow for static/level flight
-                                                    const firstAlt = points[0] && typeof points[0].alt === 'number' ? points[0].alt : null;
-                                                    const lastAlt = points[points.length - 1] && typeof points[points.length - 1].alt === 'number' ? points[points.length - 1].alt : null;
-                                                    if (firstAlt !== null && lastAlt !== null) {
-                                                        const delta = lastAlt - firstAlt;
-                                                        const thresh = 50;
-                                                        if (delta > thresh) { color = 'green'; } // Climbing
-                                                        else if (delta < -thresh) { color = 'red'; } // Descending
-                                                        // else remains yellow for static/level flight
-                                                    }
-                                                    const latlngs = densifyTrackPoints(points, 0.1);
-                                                    const poly = L.polyline(latlngs, { color: color, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
-                                                    const start = L.circleMarker(latlngs[0], { radius: 3, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
-                                                    const end = L.circleMarker(latlngs[latlngs.length - 1], { radius: 3, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
-                                                    // group for easy removal
-                                                    const lg = L.layerGroup([poly, start, end]);
-                                                    trackLayer.addLayer(lg);
-                                                    trackLayer.addTo(map);
-                                                    setTrackStatus(formatOkWithTime(`OK (${points.length})${cached ? ' (cached)' : ''}`), 'ok');
-                                                } else {
-                                            setTrackStatus('No data', 'error');
-                                        }
-                                    } catch (err) {
-                                        console.warn('Failed to fetch/show track for', hex, err);
-                                        setTrackStatus('Error', 'error');
-                                    }
-                                    // Begin polling flight details (1 Hz) and update tooltip while hovering
-                                    try { startFlightPolling(hex, p); } catch (e) {}
-                                    // Give the squawk API a short moment to populate and update tooltip when available
-                                    (async () => {
-                                        try {
-                                            const sq = await fetchSquawkWithWait(hex, 1000, 200);
-                                            if (sq) {
-                                                try {
-                                                    p.sqk = p.sqk || sq;
-                                                    p.squawk = p.squawk || sq;
-                                                    lastSquawk.set(hex, sq);
-                                                    if (marker && marker._posData) {
-                                                        marker._posData.sqk = marker._posData.sqk || sq;
-                                                        marker._posData.squawk = marker._posData.squawk || sq;
-                                                        const newHtml = buildHoverTooltipHTML(marker._posData);
-                                                        try { const tt = marker.getTooltip && marker.getTooltip(); if (tt && tt.setContent) tt.setContent(newHtml); } catch (e) {}
-                                                        try { const pp = marker.getPopup && marker.getPopup(); if (pp && pp.setContent) pp.setContent(newHtml); } catch (e) {}
-                                                    }
-                                                } catch (e) {}
-                                            }
-                                        } catch (e) {}
-                                    })();
-                                } catch (err) {
-                                    console.warn('Debounced hover error for', hex, err);
-                                }
-                            }, HOVER_DEBOUNCE_MS);
-                        } catch (err) {
-                            console.warn('Hover handler (debounce) error for', hex, err);
-                            setTrackStatus('Error', 'error');
-                        }
-                    });
-
-                    marker.on('mouseout', () => {
-                        // Cancel any pending hover fetch
-                        if (hoverFetchTimer) { clearTimeout(hoverFetchTimer); hoverFetchTimer = null; }
-                        // Delay clearing the hover track slightly to avoid flicker when moving between markers
-                        if (hoverClearTimer) clearTimeout(hoverClearTimer);
-                        hoverClearTimer = setTimeout(() => {
-                            hoverTrackHex = null;
-                            try { updateDebugPanel(null); } catch (e) {}
-                            trackLayer.clearLayers();
-                            longTracksLayer.clearLayers();
-                            if (map.hasLayer(trackLayer)) map.removeLayer(trackLayer);
-                            // Stop per-aircraft flight polling when hover ends
-                            try { stopFlightPolling(hex); } catch (e) {}
-                        }, HOVER_CLEAR_MS);
-                    });
-
-                    // Click to show temporary track (persist-on-click functionality removed)
-                    marker.on('click', async () => {
-                        try {
-                            if (!hex) return;
-                            setTrackStatus('Fetching (temp)...', 'loading');
-                            const minutesElem = document.getElementById('track-window-input');
-                            const minutes = minutesElem ? parseInt(minutesElem.value, 10) || 1 : 1;
-                            try {
-                                const { points } = await fetchTrackWithCache(hex, minutes);
-                                if (points.length > 0) {
-                                    // draw on tempPersistentLayer (distinct style)
-                                    const latlngs = densifyTrackPoints(points, 0.1);
-                                    const poly = L.polyline(latlngs, { color: '#ffaa00', weight: 3, opacity: 0.9, dashArray: '6,4', pane: 'persistentPane', interactive: false });
-                                    const start = L.circleMarker(latlngs[0], { radius: 3, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.9, pane: 'persistentPane' });
-                                    const end = L.circleMarker(latlngs[latlngs.length - 1], { radius: 3, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.9, pane: 'persistentPane' });
-                                    const lg = L.layerGroup([poly, start, end]);
-                                    tempPersistentLayer.addLayer(lg);
-                                    if (!map.hasLayer(tempPersistentLayer)) tempPersistentLayer.addTo(map);
-                                    setTrackStatus(formatOkWithTime(`Temp (${points.length})`), 'ok');
-                                    // auto-remove after TTL
-                                    setTimeout(() => {
-                                        try { tempPersistentLayer.removeLayer(lg); } catch (e) {}
-                                    }, TEMP_PERSIST_MS);
-                                } else {
-                                    setTrackStatus('No data', 'error');
-                                }
-                            } catch (err) {
-                                console.warn('Failed to fetch/show temp track for', hex, err);
-                                setTrackStatus('Error', 'error');
-                            }
-                        } catch (err) {
-                            console.warn('Failed to fetch/show temp track for', hex, err);
-                            setTrackStatus('Error', 'error');
-                        }
-                    });
-
-                    // Popup on click with more details (reuse tooltip html)
-                    const popupHtml = buildHoverTooltipHTML(p);
-                    marker.bindPopup(popupHtml);
-
-                    // attach the live position object to marker for batch merges
-                    marker._posData = p;
-
-                    liveLayer.addLayer(marker);
-                    liveMarkers.set(hex, marker);
-                });
-
-                // Remove any markers (and trails) that were not seen in this update
-                [...liveMarkers.keys()].forEach(k => {
-                    if (!seenHexes.has(k)) {
-                        const m = liveMarkers.get(k);
-                        try { liveLayer.removeLayer(m); if (map.hasLayer(m)) map.removeLayer(m); } catch (e) {}
-                        liveMarkers.delete(k);
-                        // Stop any flight polling associated with this marker
-                        try { stopFlightPolling(k); } catch (e) {}
-                        if (liveTrails.has(k)) {
-                            const tr = liveTrails.get(k);
-                            try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
-                            liveTrails.delete(k);
-                        }
-                    }
-                });
-
-                // Ensure live layer is on the map
-                if (!map.hasLayer(liveLayer)) liveLayer.addTo(map);
+                // Update live markers using the incremental update function
+                updateLiveMarkers(positions);
+                
                 setLiveStatus(formatOkWithTime(`OK (${positions.length})`), 'ok');
             } catch (err) {
                 console.warn('Failed to fetch live positions:', err);
@@ -2903,15 +2772,548 @@
                 isFetchingPositions = false;
             }
         }
-
         function setLiveStatus(text, state) {
             const el = document.getElementById('live-fetch-status');
             if (!el) return;
             el.textContent = text;
-            el.classList.remove('status-ok', 'status-loading', 'status-error');
+            el.classList.remove('status-ok', 'status-loading', 'status-error', 'status-success', 'status-warning', 'status-idle');
             if (state === 'ok') el.classList.add('status-ok');
             else if (state === 'loading') el.classList.add('status-loading');
             else if (state === 'error') el.classList.add('status-error');
+            else if (state === 'success') el.classList.add('status-success');
+            else if (state === 'warning') el.classList.add('status-warning');
+            else if (state === 'idle') el.classList.add('status-idle');
+        }
+
+        // Process live position updates from WebSocket
+        function updateLivePositionsFromSocket(data) {
+            try {
+                if (!data || !Array.isArray(data)) {
+                    console.warn('Invalid socket data received:', data);
+                    return;
+                }
+
+                // Transform socket data to match the expected format
+                // Socket data is likely an array of aircraft positions
+                let positions = data;
+
+                // Apply the same filtering logic as fetchLivePositions
+                const RECENT_MS = 10 * 1000; // 10 seconds - only truly live aircraft
+                const nowTs = Date.now();
+                const positionsByHex = new Map();
+                
+                positions.forEach(p => {
+                    const hx = (p.hex || p.HEX || p.icao || p.icao24 || '').toLowerCase();
+                    const ts = p.timestamp || p.ts || p.time || 0;
+                    if (!hx) return;
+                    if (!positionsByHex.has(hx)) positionsByHex.set(hx, []);
+                    positionsByHex.get(hx).push(Object.assign({}, p, { timestamp: ts }));
+                });
+
+                const filtered = [];
+                for (const [hex, arr] of positionsByHex.entries()) {
+                    // Sort descending by timestamp so arr[0] is newest
+                    arr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+                    const latest = arr[0];
+                    if (!latest) continue;
+                    
+                    // Only apply recency filtering for small time windows (1 hour or less)
+                    const hours = 1; // Always use 1 hour for live positions
+                    if (hours <= 1 && (latest.timestamp || nowTs) < (nowTs - RECENT_MS)) continue;
+
+                    // Seed short trail points from most recent positions
+                    try {
+                        const pts = arr.slice(0, LAST_POSITIONS_COUNT).map(p => [p.lat ?? p.Latitude ?? p.latitude, p.lon ?? p.Longitude ?? p.longitude]).reverse();
+                        if (pts && pts.length) lastPositions.set(hex, pts);
+                    } catch (e) {}
+
+                    filtered.push(latest);
+                }
+
+                positions = filtered;
+
+                // Update the live markers with the new positions
+                updateLiveMarkers(positions);
+                
+                setLiveStatus(formatOkWithTime(`Socket (${positions.length})`), 'success');
+                
+            } catch (e) {
+                console.error('Error processing socket liveUpdate:', e);
+                setLiveStatus('Socket Error', 'error');
+            }
+        }
+
+        // Update existing live markers with new position data (similar to fetchLivePositions logic)
+        function updateLiveMarkers(positions) {
+            try {
+                const now = Date.now();
+                const TIMEOUT_MS = 15 * 1000; // 15 seconds
+                
+                // Mark all existing markers as not seen in this update
+                for (const [hex, markerData] of liveMarkers.entries()) {
+                    markerData.seenInUpdate = false;
+                }
+                
+                // Process current positions
+                positions.forEach(p => {
+                    const lat = p.lat ?? p.Latitude ?? p.latitude;
+                    const lon = p.lon ?? p.Longitude ?? p.longitude;
+                    if (typeof lat !== 'number' || typeof lon !== 'number') return;
+                    const hex = (p.hex || '').toLowerCase();
+
+                    // Calculate vertical rate for color coding
+                    let verticalRate = 0;
+                    try {
+                        const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
+                        if (alt !== null && typeof alt === 'number') {
+                            const prevData = verticalRateCache.get(hex);
+                            if (prevData) {
+                                const timeDiff = (now - prevData.timestamp) / 1000;
+                                if (timeDiff > 30 && timeDiff < 300) {
+                                    const altDiff = alt - prevData.altitude;
+                                    verticalRate = (altDiff / timeDiff) * 60;
+                                }
+                            }
+                            verticalRateCache.set(hex, { altitude: alt, timestamp: now });
+                        }
+                    } catch (e) {}
+
+                    const existingMarkerData = liveMarkers.get(hex);
+                    if (existingMarkerData) {
+                        // Update existing marker position and data
+                        existingMarkerData.marker.setLatLng([lat, lon]);
+                        // Preserve previous lastSeen so we can fallback to it for timestamp if needed
+                        const prevLastSeen = existingMarkerData.lastSeen;
+                        if (!p.timestamp && prevLastSeen) {
+                            // Use previous lastSeen (ms) as a best-effort timestamp
+                            try { p.timestamp = prevLastSeen; } catch (e) {}
+                        }
+                        existingMarkerData.marker._posData = p;
+                        existingMarkerData.lastSeen = now;
+                        existingMarkerData.seenInUpdate = true;
+
+                        // Update tooltip and popup with new data
+                        const tooltipHtml = buildHoverTooltipHTML(p);
+                        try { existingMarkerData.marker.getTooltip().setContent(tooltipHtml); } catch (e) {}
+                        try { existingMarkerData.marker.getPopup().setContent(tooltipHtml); } catch (e) {}
+
+                        // Update icon if aircraft info changed
+                        try {
+                            const aircraftInfo = {
+                                manufacturer: p.manufacturer || p.airline || null,
+                                typecode: p.aircraft_type || null
+                            };
+                            if (aircraftInfo.typecode) {
+                                const track = p.heading || p.track || p.course || 0;
+                                const rot = track; // Aircraft icon is oriented North (up) by default
+                                const newIcon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                existingMarkerData.marker.setIcon(newIcon);
+                            }
+                        } catch (e) {}
+                    } else {
+                        // Create new marker
+                        let icon;
+                        const track = p.heading || p.track || p.course || 0;
+                        const rot = track; // Aircraft icon is oriented North (up) by default
+                        
+                        try {
+                            const aircraftInfo = {
+                                manufacturer: p.manufacturer || p.airline || null,
+                                typecode: p.aircraft_type || null
+                            };
+                            icon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                        } catch (e) {
+                            // Fallback to SVG icon
+                            let fallbackColor = '#ff3300';
+                            if (verticalRate > 500) {
+                                fallbackColor = '#00ff00';
+                            } else if (verticalRate < -300) {
+                                fallbackColor = '#ff0000';
+                            }
+                            icon = createAircraftIcon(fallbackColor, 50, rot);
+                        }
+
+                        const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
+
+                        // Tooltip and popup
+                        const tooltipHtml = buildHoverTooltipHTML(p);
+                        marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+                        marker.bindPopup(tooltipHtml);
+
+                        // Ensure posData includes squawk fallback
+                        try {
+                            const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
+                            if (v) { p.sqk = v; p.squawk = p.squawk || v; }
+                            else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
+                        } catch (e) {}
+                        try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
+
+                        // Ensure we have a timestamp for new markers so age can be calculated
+                        if (!p.timestamp) p.timestamp = now;
+                        marker._posData = p;
+
+                        liveLayer.addLayer(marker);
+                        liveMarkers.set(hex, { marker, lastSeen: now, seenInUpdate: true });
+                    }
+
+                    // Maintain last N valid positions for this hex and draw a short tail
+                    try {
+                        const arr = lastPositions.get(hex) || [];
+                        const last = arr.length ? arr[arr.length - 1] : null;
+                        // push only if position changed
+                        if (!last || last[0] !== lat || last[1] !== lon) {
+                            arr.push([lat, lon]);
+                            if (arr.length > LAST_POSITIONS_COUNT) arr.splice(0, arr.length - LAST_POSITIONS_COUNT);
+                            lastPositions.set(hex, arr);
+                        }
+
+                        const pts = (lastPositions.get(hex) || []).slice();
+                        if (pts.length >= 2) {
+                            if (liveTrails.has(hex)) {
+                                const tr = liveTrails.get(hex);
+                                try { tr.setLatLngs(pts); } catch (e) {}
+                            } else {
+                                const tr = L.polyline(pts, { color: '#00ffff', weight: 2, opacity: 0.7, pane: 'livePane', interactive: false });
+                                liveTrails.set(hex, tr);
+                                liveLayer.addLayer(tr);
+                            }
+
+                            // Incrementally update live track group (if present) by appending new point
+                            try {
+                                if (liveTrackGroups.has(hex)) {
+                                    const group = liveTrackGroups.get(hex);
+                                    // find last polyline in group
+                                    const layers = group.getLayers().filter(l => l instanceof L.Polyline);
+                                    const lastPoly = layers.length ? layers[layers.length - 1] : null;
+                                    const newPoint = [lat, lon];
+                                    const segColor = getVerticalRateColor(verticalRate || 0);
+                                    if (lastPoly) {
+                                        const lastColor = lastPoly.options && lastPoly.options.color ? lastPoly.options.color : null;
+                                        if (lastColor === segColor) {
+                                            try { lastPoly.addLatLng(newPoint); } catch (e) {}
+                                        } else {
+                                            // start a new segment from last poly last point to newPoint
+                                            try {
+                                                const lastLatLngs = lastPoly.getLatLngs();
+                                                const prev = lastLatLngs && lastLatLngs.length ? lastLatLngs[lastLatLngs.length - 1] : null;
+                                                if (prev) {
+                                                    const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                                    group.addLayer(poly);
+                                                    if (!liveTracksLayer.hasLayer(group)) liveTracksLayer.addLayer(group);
+                                                }
+                                            } catch (e) {}
+                                        }
+                                    } else {
+                                        // no existing poly, create one from previous tail point if available
+                                        const prev = (lastPositions.get(hex) && lastPositions.get(hex).length > 1) ? lastPositions.get(hex)[lastPositions.get(hex).length - 2] : null;
+                                        if (prev) {
+                                            try {
+                                                const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                                group.addLayer(poly);
+                                                if (!liveTracksLayer.hasLayer(group)) liveTracksLayer.addLayer(group);
+                                                liveTrackGroups.set(hex, group);
+                                            } catch (e) {}
+                                        }
+                                    }
+                                }
+
+                                // Also update any long-track (historical) group by appending if recent
+                                try {
+                                    if (longTrackGroups.has(hex)) {
+                                        const lg = longTrackGroups.get(hex);
+                                        const layers = lg.getLayers().filter(l => l instanceof L.Polyline);
+                                        const lastPoly = layers.length ? layers[layers.length - 1] : null;
+                                        const newPoint = [lat, lon];
+                                        const segColor = getVerticalRateColor(verticalRate || 0);
+                                        if (lastPoly) {
+                                            const lastColor = lastPoly.options && lastPoly.options.color ? lastPoly.options.color : null;
+                                            if (lastColor === segColor) {
+                                                try { lastPoly.addLatLng(newPoint); } catch (e) {}
+                                            } else {
+                                                try {
+                                                    const lastLatLngs = lastPoly.getLatLngs();
+                                                    const prev = lastLatLngs && lastLatLngs.length ? lastLatLngs[lastLatLngs.length - 1] : null;
+                                                    if (prev) {
+                                                        const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
+                                                        lg.addLayer(poly); if (!longTracksLayer.hasLayer(lg)) longTracksLayer.addLayer(lg);
+                                                    }
+                                                } catch (e) {}
+                                            }
+                                        } else {
+                                            const prev = (lastPositions.get(hex) && lastPositions.get(hex).length > 1) ? lastPositions.get(hex)[lastPositions.get(hex).length - 2] : null;
+                                            if (prev) {
+                                                try { const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false }); lg.addLayer(poly); if (!longTracksLayer.hasLayer(lg)) longTracksLayer.addLayer(lg); } catch (e) {}
+                                            }
+                                        }
+                                    }
+                                } catch (e) {}
+                            } catch (e) {}
+                        }
+
+                        // Remove markers that weren't seen in this update and have timed out
+                        for (const [hex, markerData] of liveMarkers.entries()) {
+                            if (!markerData.seenInUpdate && (now - markerData.lastSeen > TIMEOUT_MS)) {
+                                try {
+                                    liveLayer.removeLayer(markerData.marker);
+                                    liveMarkers.delete(hex);
+                                    // Remove any short trail polyline for this hex
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
+                                        liveTrails.delete(hex);
+                                    }
+                                } catch (e) {
+                                    console.warn('Failed to remove timed out marker for', hex, e);
+                                }
+                            }
+                        }
+
+                        // Ensure live layer is on the map
+                        if (!window.map.hasLayer(liveLayer)) liveLayer.addTo(window.map);
+                        
+                        try { updateDebugInfo(); } catch(e) {}
+                    } catch (e) {
+                        console.error('Error updating live markers:', e);
+                    }
+                }
+
+        async function doUpdateLiveMarkers(positions) {
+            try {
+                const now = Date.now();
+                const TIMEOUT_MS = 15 * 1000; // 15 seconds
+
+                // Mark all existing markers as not seen in this update
+                for (const [hex, markerData] of liveMarkers.entries()) {
+                    markerData.seenInUpdate = false;
+                }
+
+                const chunkSize = 200;
+                for (let i = 0; i < positions.length; i += chunkSize) {
+                    const slice = positions.slice(i, i + chunkSize);
+                    for (const p of slice) {
+                        try {
+                            const lat = p.lat ?? p.Latitude ?? p.latitude;
+                            const lon = p.lon ?? p.Longitude ?? p.longitude;
+                            if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+                            const hex = (p.hex || '').toLowerCase();
+
+                            // Calculate vertical rate for color coding
+                            let verticalRate = 0;
+                            try {
+                                const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
+                                if (alt !== null && typeof alt === 'number') {
+                                    const prevData = verticalRateCache.get(hex);
+                                    if (prevData) {
+                                        const timeDiff = (now - prevData.timestamp) / 1000;
+                                        if (timeDiff > 30 && timeDiff < 300) {
+                                            const altDiff = alt - prevData.altitude;
+                                            verticalRate = (altDiff / timeDiff) * 60;
+                                        }
+                                    }
+                                    verticalRateCache.set(hex, { altitude: alt, timestamp: now });
+                                }
+                            } catch (e) {}
+
+                            const existingMarkerData = liveMarkers.get(hex);
+                            if (existingMarkerData) {
+                                existingMarkerData.marker.setLatLng([lat, lon]);
+                                existingMarkerData.marker._posData = p;
+                                existingMarkerData.lastSeen = now;
+                                existingMarkerData.seenInUpdate = true;
+
+                                const tooltipHtml = buildHoverTooltipHTML(p);
+                                try { existingMarkerData.marker.getTooltip().setContent(tooltipHtml); } catch (e) {}
+                                try { existingMarkerData.marker.getPopup().setContent(tooltipHtml); } catch (e) {}
+
+                                try {
+                                    const aircraftInfo = {
+                                        manufacturer: p.manufacturer || p.airline || null,
+                                        typecode: p.aircraft_type || null
+                                    };
+                                    if (aircraftInfo.typecode) {
+                                        const track = p.heading || p.track || p.course || 0;
+                                        const rot = (track - 90 + 360) % 360;
+                                        const newIcon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                        existingMarkerData.marker.setIcon(newIcon);
+                                    }
+                                } catch (e) {}
+                            } else {
+                                let icon;
+                                const track = p.heading || p.track || p.course || 0;
+                                const rot = (track - 90 + 360) % 360; // Aircraft icon points east by default, so subtract 90 degrees
+                                
+                                try {
+                                    const aircraftInfo = {
+                                        manufacturer: p.manufacturer || p.airline || null,
+                                        typecode: p.aircraft_type || null
+                                    };
+                                    icon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                } catch (e) {
+                                    let fallbackColor = '#ff3300';
+                                    if (verticalRate > 500) {
+                                        fallbackColor = '#00ff00';
+                                    } else if (verticalRate < -300) {
+                                        fallbackColor = '#ff0000';
+                                    }
+                                    icon = createAircraftIcon(fallbackColor, 50, rot);
+                                }
+
+                                const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
+
+                                // Tooltip and popup
+                                const tooltipHtml = buildHoverTooltipHTML(p);
+                                marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+                                marker.bindPopup(tooltipHtml);
+
+                                // Ensure posData includes squawk fallback
+                                try {
+                                    const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
+                                    if (v) { p.sqk = v; p.squawk = p.squawk || v; }
+                                    else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
+                                } catch (e) {}
+                                try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
+
+                                marker._posData = p;
+
+                                liveLayer.addLayer(marker);
+                                liveMarkers.set(hex, { marker, lastSeen: now, seenInUpdate: true });
+                            }
+                        } catch (e) {}
+                    }
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
+                // Remove markers that weren't seen in this update and have timed out
+                for (const [hex, markerData] of liveMarkers.entries()) {
+                    if (!markerData.seenInUpdate && (now - markerData.lastSeen > TIMEOUT_MS)) {
+                        try {
+                            liveLayer.removeLayer(markerData.marker);
+                            liveMarkers.delete(hex);
+                            liveTrails.delete(hex);
+                        } catch (e) {
+                            console.warn('Failed to remove timed out marker for', hex, e);
+                        }
+                    }
+                }
+
+                // Ensure live layer is on the map
+                if (!window.map.hasLayer(liveLayer)) liveLayer.addTo(window.map);
+                
+                try { updateDebugInfo(); } catch(e) {}
+            } catch (e) {
+                console.error('Error updating live markers (async):', e);
+            }
+        }
+
+                    // Calculate vertical rate for color coding
+                    let verticalRate = 0;
+                    try {
+                        const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
+                        if (alt !== null && typeof alt === 'number') {
+                            const prevData = verticalRateCache.get(hex);
+                            if (prevData) {
+                                const timeDiff = (now - prevData.timestamp) / 1000;
+                                if (timeDiff > 30 && timeDiff < 300) {
+                                    const altDiff = alt - prevData.altitude;
+                                    verticalRate = (altDiff / timeDiff) * 60;
+                                }
+                            }
+                            verticalRateCache.set(hex, { altitude: alt, timestamp: now });
+                        }
+                    } catch (e) {}
+
+                    // Check if we already have a marker for this aircraft
+                    const existingMarkerData = liveMarkers.get(hex);
+                    if (existingMarkerData) {
+                        // Update existing marker position and data
+                        existingMarkerData.marker.setLatLng([lat, lon]);
+                        existingMarkerData.marker._posData = p;
+                        existingMarkerData.lastSeen = now;
+                        existingMarkerData.seenInUpdate = true;
+
+                        // Update tooltip and popup with new data
+                        const tooltipHtml = buildHoverTooltipHTML(p);
+                        try { existingMarkerData.marker.getTooltip().setContent(tooltipHtml); } catch (e) {}
+                        try { existingMarkerData.marker.getPopup().setContent(tooltipHtml); } catch (e) {}
+
+                        // Update icon if aircraft info changed
+                        try {
+                            const aircraftInfo = {
+                                manufacturer: p.manufacturer || p.airline || null,
+                                typecode: p.aircraft_type || null
+                            };
+                            if (aircraftInfo.typecode) {
+                                const track = p.heading || p.track || p.course || 0;
+                                const rot = (track - 90 + 360) % 360;
+                                const newIcon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                existingMarkerData.marker.setIcon(newIcon);
+                            }
+                        } catch (e) {}
+                    } else {
+                        // Create new marker
+                        let icon;
+                        const track = p.heading || p.track || p.course || 0;
+                        const rot = (track - 90 + 360) % 360; // Aircraft icon points east by default, so subtract 90 degrees
+                        
+                        try {
+                            const aircraftInfo = {
+                                manufacturer: p.manufacturer || p.airline || null,
+                                typecode: p.aircraft_type || null
+                            };
+                            icon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                        } catch (e) {
+                            // Fallback to SVG icon
+                            let fallbackColor = '#ff3300';
+                            if (verticalRate > 500) {
+                                fallbackColor = '#00ff00';
+                            } else if (verticalRate < -300) {
+                                fallbackColor = '#ff0000';
+                            }
+                            icon = createAircraftIcon(fallbackColor, 50, rot);
+                        }
+
+                        const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
+
+                        // Tooltip and popup
+                        const tooltipHtml = buildHoverTooltipHTML(p);
+                        marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+                        marker.bindPopup(tooltipHtml);
+
+                        // Ensure posData includes squawk fallback
+                        try {
+                            const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
+                            if (v) { p.sqk = v; p.squawk = p.squawk || v; }
+                            else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
+                        } catch (e) {}
+                        try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
+
+                        marker._posData = p;
+
+                        liveLayer.addLayer(marker);
+                        liveMarkers.set(hex, { marker, lastSeen: now, seenInUpdate: true });
+                    }
+                });
+
+                // Remove markers that weren't seen in this update and have timed out
+                for (const [hex, markerData] of liveMarkers.entries()) {
+                    if (!markerData.seenInUpdate && (now - markerData.lastSeen > TIMEOUT_MS)) {
+                        try {
+                            liveLayer.removeLayer(markerData.marker);
+                            liveMarkers.delete(hex);
+                            liveTrails.delete(hex);
+                        } catch (e) {
+                            console.warn('Failed to remove timed out marker for', hex, e);
+                        }
+                    }
+                }
+
+                // Ensure live layer is on the map
+                if (!window.map.hasLayer(liveLayer)) liveLayer.addTo(window.map);
+                
+                try { updateDebugInfo(); } catch(e) {}
+            } catch (e) {
+                console.error('Error updating live markers:', e);
+            }
         }
 
         function setTrackStatus(text, state) {
@@ -2934,37 +3336,7 @@
             }
         }
 
-        function toggleLivePositions() {
-            // Live positions are always enabled
-            const enabled = true;
-            if (enabled) {
-                // Only start polling if not already active
-                if (!liveIntervalId) {
-                    // Fetch immediately and then every 1 second
-                    fetchLivePositions();
-                    liveIntervalId = setInterval(fetchLivePositions, 1000);
-                }
-                // Start batch polling for visible aircraft (rate-limited)
-                try { startBatchPollingVisibleFlights(); } catch (e) { console.warn('Failed to start batch polling', e); }
-                // Start live tracks polling to draw short recent tracks for active flights
-                try { startLiveTracksPolling(); } catch (e) { console.warn('Failed to start live tracks polling', e); }
-                // Start long tracks polling to draw historical tracks for visible aircraft
-                try { startLongTracksPolling(); } catch (e) { console.warn('Failed to start long tracks polling', e); }
-            } else {
-                if (liveIntervalId) { clearInterval(liveIntervalId); liveIntervalId = null; }
-                clearLiveLayer();
-                // Clear any hovered track overlay
-                hoverTrackHex = null;
-                trackLayer.clearLayers();
-                longTracksLayer.clearLayers();
-                if (window.map && typeof window.map.hasLayer === 'function' && window.map.hasLayer(trackLayer)) window.map.removeLayer(trackLayer);
-                // Stop batch polling when live is disabled
-                try { stopBatchPollingVisibleFlights(); } catch (e) {}
-                // Stop live tracks polling and clear live tracks
-                try { stopLiveTracksPolling(); } catch (e) {}
-                // Long tracks remain active (mandatory)
-            }
-        }
+
 
         // Convert lat/lon distance to degrees (approximation)
         function nmToDegrees(nm) {
@@ -3095,22 +3467,7 @@
 
         // Get color based on vertical rate (feet per minute)
         // Returns: 'red' for descending, 'green' for climbing, 'yellow' for level flight
-        function getVerticalRateColor(verticalRate) {
-            const rate = Math.abs(verticalRate || 0);
 
-            // Thresholds for determining flight phase (feet per minute)
-            const levelThreshold = 200;  // ±200 fpm considered level
-            const climbThreshold = 500;  // >500 fpm climbing
-            const descentThreshold = 500; // <-500 fpm descending
-
-            if (verticalRate > climbThreshold) {
-                return 'green';  // Climbing
-            } else if (verticalRate < -descentThreshold) {
-                return 'red';    // Descending
-            } else {
-                return 'yellow'; // Level flight
-            }
-        }
 
         // Get color based on intensity
         function getColorForIntensity(value, max, mode = 'intensity') {
@@ -3177,6 +3534,10 @@
                         const days = parseInt(w.replace('d',''), 10);
                         return isNaN(days) ? 24 : days * 24;
                     }
+                    if (w.endsWith('w')) {
+                        const weeks = parseInt(w.replace('w',''), 10);
+                        return isNaN(weeks) ? 24 : weeks * 7 * 24; // Convert weeks to hours
+                    }
                     if (w.endsWith('h')) {
                         const hrs = parseInt(w.replace('h',''), 10);
                         return isNaN(hrs) ? 24 : hrs;
@@ -3209,7 +3570,7 @@
                 const url = `/api/heatmap-data?${params.toString()}`;
                 console.log(`Loading grid data with URL params: source=${source}, hours=${hours}, gridSizeNm=${gridSizeNm}; fetching ${url}`);
 
-                const response = await fetch(url);
+                const response = await fetchWithTimeout(url);
                 if (!response.ok) throw new Error(`API error: ${response.status}`);
 
                 // Accept either an array response or an object { grid: [...] }

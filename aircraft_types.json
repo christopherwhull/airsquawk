@@ -2077,6 +2077,9 @@
       "bodyType": "Helicopter",
       "engines": 1,
       "category": "Helicopter"
+    },
+    "B737-377": {
+      "manufacturer": "737"
     }
   }
 }

@@ -145,7 +145,7 @@ describe('API Routes', () => {
       const localApp = express();
       localApp.use(express.json());
       const injectedAirlineDB = { TEST: { name: 'Test Airline', logo: '/api/v2logos/TEST' } };
-      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, { airlineDB: injectedAirlineDB });
+      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, 0, { airlineDB: injectedAirlineDB });
 
       const response = await request(localApp)
         .get('/api/airline-database')
@@ -163,7 +163,7 @@ describe('API Routes', () => {
       const localApp = express();
       localApp.use(express.json());
       const injectedAirlineDB = { TEST: { name: 'Test Airline', logo: '/api/v2logos/TEST' } };
-      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, { airlineDB: injectedAirlineDB });
+      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, 0, { airlineDB: injectedAirlineDB });
 
       const response = await request(localApp)
         .get('/api/airlines')
@@ -322,7 +322,7 @@ describe('API Routes', () => {
       const our = active.find(f => (f.icao || '').toLowerCase() === 'def456');
       expect(our).toBeDefined();
       expect(our.airline_code).toBeUndefined();
-      expect(our.airline_name).toBe('');
+      expect(our.airline_name).toBe(null);
       expect(our.airlineLogo).toBeUndefined();
     });
 
@@ -348,7 +348,7 @@ describe('API Routes', () => {
       const localApp = express();
       localApp.use(express.json());
       // Inject airlineDB via opts to make test deterministic
-      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, { airlineDB: { ABC: { name: 'ABC Airways', logo: null } } });
+      setupApiRoutes(localApp, mockS3, mockReadBucket, mockWriteBucket, mockGetInMemoryState, mockCache, mockPositionCache, 0, { airlineDB: { ABC: { name: 'ABC Airways', logo: null } } });
 
       const response = await request(localApp).get('/api/flights');
       expect(response.status).toBe(200);

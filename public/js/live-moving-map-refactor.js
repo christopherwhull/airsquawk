@@ -112,8 +112,8 @@ try {
 // Create panes used by track drawing so layers have expected DOM parents
 try {
   map.createPane('livePane'); map.getPane('livePane').style.zIndex = 650;
-  map.createPane('persistentPane'); map.getPane('persistentPane').style.zIndex = 660;
-  map.createPane('markerPane'); map.getPane('markerPane').style.zIndex = 670;
+  map.createPane('persistentPane'); map.getPane('persistentPane').style.zIndex = 680;
+  map.createPane('markerPane'); map.getPane('markerPane').style.zIndex = 690;
 } catch (e) { console.warn('Failed to create panes (already present?)', e); }
 
 // ===== SECTION START: fetchWithTimeout =====
@@ -237,6 +237,7 @@ const longTracksLayer = L.layerGroup().addTo(map);
 try { window.longTracksLayer = longTracksLayer; } catch (e) {}
 
 // Set window._refactor_autoTrackFetchEnabled=true before this bundle loads to restore legacy auto-fetching.
+window._refactor_autoTrackFetchEnabled = true;
 function autoTrackFetchEnabled(){
   return !!window._refactor_autoTrackFetchEnabled;
 }
@@ -583,6 +584,7 @@ async function _fetchAndDrawLiveTracks_body(){
                 if (segment.points.length >= 2) {
                   const latlngs = densifyTrackPoints(segment.points, 0.1);
                   const poly = L.polyline(latlngs, { color: segment.color, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
+                  console.log(`Drawing track for ${hx}: ${latlngs.length} points, color: ${segment.color}, layer on map: ${map.hasLayer(liveTracksLayer)}`);
                   lg.addLayer(poly);
                   // If this hex has been persisted by the user, also append a copy
                   // of the newly-fetched segment into the persistent tracks group.
@@ -666,6 +668,7 @@ async function _fetchAndDrawLiveTracks_body(){
 }
 
 async function fetchAndDrawLiveTracks(){
+  console.log('fetchAndDrawLiveTracks called');
   try{ await _fetchAndDrawLiveTracks_body(); }
   catch(e){
     if (e && (e.name === 'AbortError' || e.name === 'TimeoutError' || (e.message && /abort|timeout|failed to fetch|net::ERR_ABORTED/i.test(e.message)))) {
@@ -727,8 +730,10 @@ function startPositionPolling(intervalMs = 1000){
   _refactor_position_poll_controller = new AbortController();
   const controller = _refactor_position_poll_controller;
   const doPoll = async () => {
+    console.log('doPoll called');
     try{
       const positions = await fetchLivePositions({ hours: 0.02, limit: 1000, signal: controller.signal });
+      console.log('doPoll received', positions ? positions.length : 0, 'positions');
       if (positions && positions.length) {
         try { processPositions(positions); } catch(e){ console.debug('processPositions failed', e); }
       }
@@ -900,7 +905,7 @@ async function ensureLiveTrackForHex(hex, minutes) {
       segments.forEach(segment => {
         if (!segment || !segment.points || segment.points.length < 2) return;
         const latlngs = densifyTrackPoints(segment.points, 0.1);
-        const poly = L.polyline(latlngs, { color: segment.color || '#00aaff', weight: 2, opacity: 0.9, pane: 'persistentPane', interactive: false });
+        const poly = L.polyline(latlngs, { color: segment.color || '#00aaff', weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
         lg.addLayer(poly);
       });
 
@@ -921,6 +926,7 @@ async function ensureLiveTrackForHex(hex, minutes) {
 }
 
 async function processPositions(positions) {
+  console.log('processPositions called with', positions ? positions.length : 0, 'positions');
   try {
     if (!Array.isArray(positions)) return;
     // Ensure global lastPositions map exists for testing
@@ -1011,6 +1017,19 @@ async function processPositions(positions) {
           }
         }
       } catch (e) { /* ignore individual position errors */ }
+    }
+
+    // Trigger live tracks update if we have visible aircraft
+    if (seenHexes.size > 0) {
+      // Debounce the live tracks fetch to avoid too frequent calls
+      const now = Date.now();
+      const lastFetch = window._refactor_lastLiveTracksFetch || 0;
+      const debounceMs = 5000; // Only fetch live tracks every 5 seconds max
+      if (now - lastFetch > debounceMs) {
+        window._refactor_lastLiveTracksFetch = now;
+        console.log('Triggering automatic track fetch from processPositions');
+        fetchAndDrawLiveTracks().catch(e => console.debug('fetchAndDrawLiveTracks failed', e && (e.message || e)));
+      }
     }
 
     // Cleanup: remove markers/tracks for hexes not present in this update if strict mode enabled
@@ -1365,6 +1384,160 @@ window._refactor_doUpdateLiveMarkers = doUpdateLiveMarkers;
     console.log('Refactor page smoke run successful');
   }catch(e){ console.error('Smoke run failed', e); }
 })();
+
+// Boundary layer references for toggling
+let boundaryLayers = [];
+let artccLayer, countryLayer, firLayer, stateLayer, provinceLayer, oceanicLayer;
+
+// Load ARTCC boundaries from FAA Open Data
+fetch('https://adds-faa.opendata.arcgis.com/datasets/67885972e4e940b2aa6d74024901c561_0.geojson')
+    .then(response => response.json())
+    .then(data => {
+        artccLayer = L.geoJSON(data, {
+            style: {
+                color: 'red',
+                weight: 2,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(artccLayer, "ARTCC Boundaries");
+        boundaryLayers.push(artccLayer);
+    })
+    .catch(error => console.error('Failed to load ARTCC boundaries:', error));
+
+// Load World Country Boundaries
+fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+    .then(response => response.json())
+    .then(data => {
+        countryLayer = L.geoJSON(data, {
+            style: {
+                color: '#666',
+                weight: 1,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(countryLayer, "Country Borders");
+        boundaryLayers.push(countryLayer);
+    })
+    .catch(error => console.error('Failed to load country boundaries:', error));
+
+// Load FIR and Oceanic Boundaries from VATSIM data
+fetch('https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/Boundaries.geojson')
+    .then(response => response.json())
+    .then(data => {
+        // Filter FIR boundaries (non-oceanic)
+        const firFeatures = data.features.filter(feature => feature.properties.oceanic !== "1");
+        firLayer = L.geoJSON({ type: "FeatureCollection", features: firFeatures }, {
+            style: {
+                color: '#00ff00',
+                weight: 1.5,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(firLayer, "FIR Boundaries");
+        boundaryLayers.push(firLayer);
+
+        // Filter Oceanic boundaries
+        const oceanicFeatures = data.features.filter(feature => feature.properties.oceanic === "1");
+        oceanicLayer = L.geoJSON({ type: "FeatureCollection", features: oceanicFeatures }, {
+            style: {
+                color: '#0080ff',
+                weight: 2,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(oceanicLayer, "Oceanic Boundaries");
+        boundaryLayers.push(oceanicLayer);
+    })
+    .catch(error => console.error('Failed to load VATSIM boundaries:', error));
+
+// Load US State Boundaries
+fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+    .then(response => response.json())
+    .then(data => {
+        stateLayer = L.geoJSON(data, {
+            style: {
+                color: '#ffa500',
+                weight: 1,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(stateLayer, "US State Borders");
+        boundaryLayers.push(stateLayer);
+    })
+    .catch(error => console.error('Failed to load US state boundaries:', error));
+
+// Load Canadian Province Boundaries
+fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/canada.geojson')
+    .then(response => response.json())
+    .then(data => {
+        provinceLayer = L.geoJSON(data, {
+            style: {
+                color: '#ff4500',
+                weight: 1,
+                fillOpacity: 0
+            }
+        });
+        layersControl.addOverlay(provinceLayer, "Canadian Provinces");
+        boundaryLayers.push(provinceLayer);
+    })
+    .catch(error => console.error('Failed to load Canadian province boundaries:', error));
+
+// Load Oceanic Control Areas (CTA/FIR boundaries for oceanic airspace) - DISABLED: oceanic boundaries are now loaded from main boundaries file
+// fetch('https://raw.githubusercontent.com/vatsimnetwork/OceanicDataProject/master/OceanicBoundaries.geojson')
+//     .then(response => response.json())
+//     .then(data => {
+//         oceanicLayer = L.geoJSON(data, {
+//             style: {
+//                 color: '#0080ff',
+//                 weight: 2,
+//                 fillOpacity: 0
+//             }
+//         });
+//         layersControl.addOverlay(oceanicLayer, "Oceanic Boundaries");
+//         boundaryLayers.push(oceanicLayer);
+//     })
+//     .catch(error => console.error('Failed to load oceanic boundaries:', error));
+
+// Add event listener for show-boundaries checkbox
+document.getElementById('show-boundaries').addEventListener('change', () => {
+    const showBoundaries = document.getElementById('show-boundaries').checked;
+    boundaryLayers.forEach(layer => {
+        if (showBoundaries) {
+            if (!map.hasLayer(layer)) {
+                map.addLayer(layer);
+            }
+        } else {
+            if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        }
+    });
+});
+
+// Helper function to toggle individual boundary layers
+function toggleBoundaryLayer(checkboxId, layer) {
+    document.getElementById(checkboxId).addEventListener('change', () => {
+        const isChecked = document.getElementById(checkboxId).checked;
+        if (isChecked && layer) {
+            if (!map.hasLayer(layer)) {
+                map.addLayer(layer);
+            }
+        } else if (layer) {
+            if (map.hasLayer(layer)) {
+                map.removeLayer(layer);
+            }
+        }
+    });
+}
+
+// Add event listeners for individual boundary checkboxes using helper function
+toggleBoundaryLayer('show-artcc', artccLayer);
+toggleBoundaryLayer('show-countries', countryLayer);
+toggleBoundaryLayer('show-fir', firLayer);
+toggleBoundaryLayer('show-us-states', stateLayer);
+toggleBoundaryLayer('show-canada', provinceLayer);
+toggleBoundaryLayer('show-oceanic', oceanicLayer);
 
 // Wire up simple UI controls (start/stop, interval)
 try{

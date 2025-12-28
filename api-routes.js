@@ -236,5 +236,74 @@ function setupApiRoutes(app, s3, bucketName) {
     });
 }
 
+// FlightAware API integration routes
+app.get('/api/flightaware/flight/:callsign', async (req, res) => {
+    try {
+        const { callsign } = req.params;
+        const flightAware = require('./lib/flightaware-api');
+
+        if (!flightAware.enabled) {
+            return res.json({ error: 'FlightAware API not enabled' });
+        }
+
+        const flightData = await flightAware.getFlightByCallsign(callsign);
+        res.json(flightData || { error: 'Flight not found' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/flightaware/aircraft/:registration', async (req, res) => {
+    try {
+        const { registration } = req.params;
+        const flightAware = require('./lib/flightaware-api');
+
+        if (!flightAware.enabled) {
+            return res.json({ error: 'FlightAware API not enabled' });
+        }
+
+        const aircraftData = await flightAware.getAircraftInfo(registration);
+        res.json(aircraftData || { error: 'Aircraft not found' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/flightaware/airport/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const flightAware = require('./lib/flightaware-api');
+
+        if (!flightAware.enabled) {
+            return res.json({ error: 'FlightAware API not enabled' });
+        }
+
+        const airportData = await flightAware.getAirportInfo(code.toUpperCase());
+        res.json(airportData || { error: 'Airport not found' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.get('/api/flightaware/search', async (req, res) => {
+    try {
+        const { query } = req.query;
+        const flightAware = require('./lib/flightaware-api');
+
+        if (!flightAware.enabled) {
+            return res.json({ error: 'FlightAware API not enabled' });
+        }
+
+        if (!query) {
+            return res.status(400).json({ error: 'Query parameter required' });
+        }
+
+        const searchResults = await flightAware.searchFlights(query);
+        res.json(searchResults || { results: [] });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 module.exports = { setupApiRoutes };
 ```

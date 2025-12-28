@@ -243,6 +243,48 @@
             </div>
 
             <div class="control-group">
+                <label for="show-boundaries">
+                    <input type="checkbox" id="show-boundaries"> Show All Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-artcc">
+                    <input type="checkbox" id="show-artcc"> ARTCC Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-countries">
+                    <input type="checkbox" id="show-countries"> Country Borders
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-fir">
+                    <input type="checkbox" id="show-fir"> FIR Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-us-states">
+                    <input type="checkbox" id="show-us-states"> US State Borders
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-canada">
+                    <input type="checkbox" id="show-canada"> Canadian Provinces
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label for="show-oceanic">
+                    <input type="checkbox" id="show-oceanic"> Oceanic Boundaries
+                </label>
+            </div>
+
+            <div class="control-group">
                 <button id="clear-persistent-tracks" onclick="clearAllPersistentTracks()">Clear Tracks</button>
             </div>
 
@@ -645,6 +687,10 @@
         // Expose overlay/base layers and control so global helpers like saveSettings can access them
         try { window.overlayLayers = overlayLayers; window.baseLayers = baseLayers; window.layersControl = layersControl; } catch(e) {}
 
+        // Boundary layer references for individual toggling
+        let boundaryLayers = [];
+        let artccLayer, countryLayer, firLayer, stateLayer, provinceLayer, oceanicLayer;
+
         // Register the Heatmap Grid overlay early so its label is present in the layers control
         // always (prevents overlay toggle flakiness in tests by ensuring a consistent control entry)
         try {
@@ -671,7 +717,7 @@
         fetch('https://adds-faa.opendata.arcgis.com/datasets/67885972e4e940b2aa6d74024901c561_0.geojson')
             .then(response => response.json())
             .then(data => {
-                const artccLayer = L.geoJSON(data, {
+                artccLayer = L.geoJSON(data, {
                     style: {
                         color: 'red',
                         weight: 2,
@@ -679,9 +725,130 @@
                     }
                 });
                 layersControl.addOverlay(artccLayer, "ARTCC Boundaries");
+                boundaryLayers.push(artccLayer);
             })
             .catch(error => console.error('Failed to load ARTCC boundaries:', error));
-        
+
+        // Load World Country Boundaries
+        fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+            .then(response => response.json())
+            .then(data => {
+                countryLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#666',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(countryLayer, "Country Borders");
+                boundaryLayers.push(countryLayer);
+            })
+            .catch(error => console.error('Failed to load country boundaries:', error));
+
+        // Load FIR (Flight Information Region) Boundaries
+        fetch('https://raw.githubusercontent.com/vatsimnetwork/vatspy-data-project/master/FIRBoundaries.geojson')
+            .then(response => response.json())
+            .then(data => {
+                firLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#00ff00',
+                        weight: 1.5,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(firLayer, "FIR Boundaries");
+                boundaryLayers.push(firLayer);
+            })
+            .catch(error => console.error('Failed to load FIR boundaries:', error));
+
+        // Load US State Boundaries
+        fetch('https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json')
+            .then(response => response.json())
+            .then(data => {
+                stateLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#ffa500',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(stateLayer, "US State Borders");
+                boundaryLayers.push(stateLayer);
+            })
+            .catch(error => console.error('Failed to load US state boundaries:', error));
+
+        // Load Canadian Province Boundaries
+        fetch('https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/canada.geojson')
+            .then(response => response.json())
+            .then(data => {
+                provinceLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#ff4500',
+                        weight: 1,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(provinceLayer, "Canadian Provinces");
+                boundaryLayers.push(provinceLayer);
+            })
+            .catch(error => console.error('Failed to load Canadian province boundaries:', error));
+
+        // Load Oceanic Control Areas (CTA/FIR boundaries for oceanic airspace)
+        fetch('https://raw.githubusercontent.com/vatsimnetwork/OceanicDataProject/master/OceanicBoundaries.geojson')
+            .then(response => response.json())
+            .then(data => {
+                oceanicLayer = L.geoJSON(data, {
+                    style: {
+                        color: '#0080ff',
+                        weight: 2,
+                        fillOpacity: 0
+                    }
+                });
+                layersControl.addOverlay(oceanicLayer, "Oceanic Boundaries");
+                boundaryLayers.push(oceanicLayer);
+            })
+            .catch(error => console.error('Failed to load oceanic boundaries:', error));
+
+        // Add event listener for show-boundaries checkbox
+        document.getElementById('show-boundaries').addEventListener('change', () => {
+            const showBoundaries = document.getElementById('show-boundaries').checked;
+            boundaryLayers.forEach(layer => {
+                if (showBoundaries) {
+                    if (!map.hasLayer(layer)) {
+                        map.addLayer(layer);
+                    }
+                } else {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                }
+            });
+        });
+
+        // Helper function to toggle individual boundary layers
+        function toggleBoundaryLayer(checkboxId, layer) {
+            document.getElementById(checkboxId).addEventListener('change', () => {
+                const isChecked = document.getElementById(checkboxId).checked;
+                if (isChecked && layer) {
+                    if (!map.hasLayer(layer)) {
+                        map.addLayer(layer);
+                    }
+                } else if (layer) {
+                    if (map.hasLayer(layer)) {
+                        map.removeLayer(layer);
+                    }
+                }
+            });
+        }
+
+        // Add event listeners for individual boundary checkboxes using helper function
+        toggleBoundaryLayer('show-artcc', artccLayer);
+        toggleBoundaryLayer('show-countries', countryLayer);
+        toggleBoundaryLayer('show-fir', firLayer);
+        toggleBoundaryLayer('show-us-states', stateLayer);
+        toggleBoundaryLayer('show-canada', provinceLayer);
+        toggleBoundaryLayer('show-oceanic', oceanicLayer);
+
         // Load Squawk Transitions layer
         console.log('About to create squawk transitions layer...');
         let squawkTransitionsLayer = L.layerGroup();
@@ -751,7 +918,7 @@
                             const popupContent = `
                                 <div style="font-family: Arial, sans-serif; font-size: 12px;">
                                     <strong>Squawk Transition</strong><br>
-                                    Aircraft: ${transition.hex || transition.icao || 'Unknown'}<br>
+                                    Aircraft: ${ (transition.callsign || transition.ident) ? `<a href="https://flightaware.com/live/flight/${encodeURIComponent((transition.callsign||transition.ident).trim())}" target="_blank" rel="noopener noreferrer">${transition.callsign || transition.ident}</a>` : (transition.hex || transition.icao) ? `${transition.hex || transition.icao}` : 'Unknown'}<br>
                                     From: ${transition.from} → To: ${transition.to}<br>
                                     Time: ${new Date(transition.timestamp).toLocaleString()}<br>
                                     Position: ${transition.lat.toFixed(4)}, ${transition.lon.toFixed(4)}
@@ -1604,7 +1771,8 @@
                 try { updateDebugInfo(); } catch(e) {}
                 setTrackStatus(formatOkWithTime('OK (Long)'), 'ok');
             } catch (err) {
-                console.warn('Long tracks fetch/draw error:', err && (err.message || err)); if (err && err.stack) console.debug(err.stack); }
+                console.warn('Long tracks fetch/draw error:', err && (err.message || err));
+                if (err && err.stack) console.debug(err.stack);
                 setTrackStatus('Error', 'error');
             }
         }
@@ -1657,14 +1825,13 @@
                 else console.warn('ensureLiveTrackForHex: fetch failed for', hex, err && (err.message || err));
             }
         }
+        // ===== SECTION END: ensureLiveTrackForHex =====
 
-        // Fetch and draw short live tracks for currently active flights (visible on the map)
-        async function fetchAndDrawLiveTracks() {
-            if (!window.map || typeof window.map.getBounds !== 'function') {
-                console.warn('fetchAndDrawLiveTracks: map not ready');
-                return;
-            }
-            try {
+        // ===== SECTION START: fetchAndDrawLiveTracks =====
+        // Purpose: Fetch and draw short live tracks for currently active flights (visible on the map).
+        // Note: This block performs network requests in chunks and uses an AbortController to cancel previous fetches.
+        // The main try body has been moved to a helper function to make braces explicit: _fetchAndDrawLiveTracks_body
+        async function _fetchAndDrawLiveTracks_body() {
                 setTrackStatus('Loading...', 'loading');
                 // gather visible hexes from liveMarkers
                 const bounds = window.map.getBounds();
@@ -1796,11 +1963,23 @@
                 if (!map.hasLayer(liveTracksLayer)) liveTracksLayer.addTo(map);
                 try { updateDebugInfo(); } catch(e) {}
                 setTrackStatus(formatOkWithTime('OK (Live)'), 'ok');
+        }
+
+        async function fetchAndDrawLiveTracks() {
+            if (!window.map || typeof window.map.getBounds !== 'function') {
+                console.warn('fetchAndDrawLiveTracks: map not ready');
+                return;
+            }
+            try {
+                await _fetchAndDrawLiveTracks_body();
             } catch (err) {
-                console.warn('Live tracks fetch/draw error:', err && (err.message || err)); if (err && err.stack) console.debug(err.stack); }
+                // CATCH BLOCK: fetchAndDrawLiveTracks main error handler
+                console.warn('Live tracks fetch/draw error:', err && (err.message || err));
+                if (err && err.stack) console.debug(err.stack);
                 setTrackStatus('Error', 'error');
             }
         }
+        // ===== SECTION END: fetchAndDrawLiveTracks =====
 
         function stopBatchPollingVisibleFlights() {
             if (batchPollIntervalId) {
@@ -1809,6 +1988,8 @@
             }
         }
 
+        // ===== SECTION START: runBatchPollOnce =====
+        // Purpose: Run a single batch poll to enrich visible flights; avoid overlapping by guarding with batchPollInFlight.
         async function runBatchPollOnce() {
             if (batchPollInFlight) return; // avoid overlapping
             if (!window.map || typeof window.map.getBounds !== 'function') {
@@ -2152,14 +2333,12 @@
 
             // Create FlightAware link
             const hex = (p.hex || '').toUpperCase();
-            const flightAwareUrl = callsign 
-                ? `https://flightaware.com/live/flight/${encodeURIComponent(callsign)}`
-                : `https://flightaware.com/live/modes/${encodeURIComponent(hex.toLowerCase())}/ident`;
+            const flightAwareUrl = callsign ? `https://flightaware.com/live/flight/${encodeURIComponent(callsign)}` : null;
             const displayText = `${hex}${callsign ? ' — ' + callsign : ''}`;
 
             return `
                 <div style="min-width:200px; background-color:${popupBgColor}; border-radius:6px; padding:8px;">
-                    <strong><a href="${flightAwareUrl}" onclick="window.open('${flightAwareUrl}', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes'); return false;" style="color:inherit;text-decoration:none;cursor:pointer;">${displayText}</a></strong>
+                    <strong>${ flightAwareUrl ? `<a href="${flightAwareUrl}" onclick="window.open('${flightAwareUrl}', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes'); return false;" style="color:inherit;text-decoration:none;cursor:pointer;">${displayText}</a>` : displayText }</strong>
                     <div>Registration: <em>${reg || '—'}</em></div>
                     <div>Type: <em>${aircraftType || '—'}</em></div>
                     <div>Airline: <em>${airline || '—'}</em>${airlineLogoHtml}</div>
@@ -2618,7 +2797,14 @@
         // Process live position updates from WebSocket
         function updateLivePositionsFromSocket(data) {
             try {
-                let positions = (data && Array.isArray(data.aircraft)) ? data.aircraft : (Array.isArray(data) ? data : null);
+                let positions = null;
+                if (data && Array.isArray(data.positions)) {
+                    positions = data.positions;
+                } else if (data && Array.isArray(data.aircraft)) {
+                    positions = data.aircraft;
+                } else if (Array.isArray(data)) {
+                    positions = data;
+                }
 
                 if (!positions) {
                     console.warn('Invalid socket data received:', data);

@@ -1,0 +1,282 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Minimal Aircraft Heatmap Prototype</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+	<style>
+		html, body, #map { height: 100%; margin: 0; padding: 0; }
+		#map { width: 100vw; height: 100vh; }
+		.leaflet-popup-content { font-size: 14px; }
+	</style>
+</head>
+<body>
+	<div id="map"></div>
+	<div class="info-panel" style="background: #222; color: #e0e0e0; padding: 15px; display: flex; flex-wrap: wrap; gap: 15px;">
+		<div class="info-card" style="background: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #0066cc; min-width: 180px;">
+			<strong>Aircraft</strong>
+			<span id="card-aircraft-count">Loading...</span>
+		</div>
+		<div class="info-card" style="background: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #0066cc; min-width: 180px;">
+			<strong>Total Positions</strong>
+			<span id="card-position-count">Loading...</span>
+		</div>
+		<div class="info-card" style="background: #1e1e1e; padding: 12px; border-radius: 4px; border-left: 3px solid #0066cc; min-width: 180px;">
+			<strong>Load Time</strong>
+			<span id="card-load-time">Loading...</span>
+		</div>
+	</div>
+	<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+	<script type="module">
+		import { getVerticalRateColor, getIconForAircraft, createAircraftLogoIcon, buildPopupHTML } from './aircraftHelpers.js';
+		// --- Tracks Layer ---
+		const tracksLayer = L.layerGroup();
+		// --- Map Layers ---
+		const map = L.map('map').setView([41.7, -86.3], 7);
+		const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+			attribution: '© OpenStreetMap contributors',
+			maxZoom: 18
+		});
+		const openTopoLayer = L.tileLayer('https://tile.opentopomap.org/{z}/{x}/{y}.png', {
+			attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)',
+			maxZoom: 17
+		});
+		const cartoVoyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+			attribution: '© OpenStreetMap contributors © CARTO',
+			maxZoom: 19,
+			subdomains: 'abcd'
+		});
+		const arcgisImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+			attribution: 'Tiles © Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+			maxZoom: 18
+		});
+		const arcgisStreet = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+			attribution: 'Tiles © Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012',
+			maxZoom: 18
+		});
+		const arcgisTopo = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+			attribution: 'Tiles © Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community',
+			maxZoom: 18
+		});
+		// FAA and weather overlays (proxyBase must match your backend config)
+		const proxyBase = 'http://localhost:3004/tile';
+		const faaVfrTerminal = L.tileLayer(`${proxyBase}/vfr-terminal/{z}/{x}/{y}`, {
+			attribution: '© FAA', maxZoom: 12, minZoom: 8, zIndex: 200, opacity: 0.8
+		});
+		const faaVfrSectional = L.tileLayer(`${proxyBase}/vfr-sectional/{z}/{x}/{y}`, {
+			attribution: '© FAA', maxZoom: 12, minZoom: 8, zIndex: 200, opacity: 0.8
+		});
+		const faaIfrAreaLow = L.tileLayer(`${proxyBase}/ifr-arealow/{z}/{x}/{y}`, {
+			attribution: '© FAA', maxZoom: 12, minZoom: 8, zIndex: 200, opacity: 0.8
+		});
+		const faaIfrHigh = L.tileLayer(`${proxyBase}/ifr-enroute-high/{z}/{x}/{y}`, {
+			attribution: '© FAA', maxZoom: 12, minZoom: 8, zIndex: 200, opacity: 0.8
+		});
+		const weatherRadarUrl = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913/{z}/{x}/{y}.png';
+		const surfaceAnalysisUrl = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/sfc_analysis/{z}/{x}/{y}.png';
+		const satelliteWvUrl = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/goes-wv-4km-900913/{z}/{x}/{y}.png';
+		const weatherRadar = L.tileLayer(weatherRadarUrl, { attribution: 'Weather © Iowa State University', opacity: 0.25, zIndex: 250 });
+		const surfaceAnalysis = L.tileLayer(surfaceAnalysisUrl, { attribution: 'Weather © Iowa State University', opacity: 0.25, zIndex: 251 });
+		const satelliteWv = L.tileLayer(satelliteWvUrl, { attribution: 'Weather © Iowa State University', opacity: 0.25, zIndex: 249 });
+		// Layer control
+		const baseLayers = {
+			"OpenStreetMap (Internet)": osmLayer,
+			"CartoDB Voyager (Internet)": cartoVoyagerLayer,
+			"OpenTopoMap (Internet)": openTopoLayer,
+			"ArcGIS World Imagery": arcgisImagery,
+			"ArcGIS World Street Map": arcgisStreet,
+			"ArcGIS World Topo": arcgisTopo
+		};
+		const overlayLayers = {
+			"Weather Radar Internet": weatherRadar,
+			"Surface Analysis Internet": surfaceAnalysis,
+			"Satellite Water Vapor Internet": satelliteWv,
+			"FAA VFR Terminal": faaVfrTerminal,
+			"FAA VFR Sectional": faaVfrSectional,
+			"FAA IFR Area Low": faaIfrAreaLow,
+			"FAA IFR Enroute High": faaIfrHigh,
+			"Tracks": tracksLayer
+		};
+		osmLayer.addTo(map); // Default base layer
+		L.control.layers(baseLayers, overlayLayers).addTo(map);
+		tracksLayer.addTo(map);
+		let markers = new Map();
+		const trackPoints = new Map(); // hex -> array of [lat, lon]
+		const trackPolylines = new Map(); // hex -> L.Polyline
+		async function updateMarkers(positions) {
+			// Sort by hex then timestamp to process in a predictable order
+			positions.sort((a, b) => {
+				const hexA = a.hex || a.HEX || a.icao || a.icao24 || '';
+				const hexB = b.hex || b.HEX || b.icao || b.icao24 || '';
+				if (hexA < hexB) return -1;
+				if (hexA > hexB) return 1;
+				const tsA = a.timestamp || 0;
+				const tsB = b.timestamp || 0;
+				return tsA - tsB;
+			});
+
+			// Only keep positions newer than 2 minutes (120 seconds)
+			const now = Math.floor(Date.now() / 1000);
+			const MAX_AGE = 120; // seconds
+			const latestByHex = new Map();
+			positions.forEach(pos => {
+				const hex = pos.hex || pos.HEX || pos.icao || pos.icao24;
+				if (!hex) return;
+				const ts = pos.timestamp || 0;
+				if (now - ts > MAX_AGE) return; // skip old positions
+				const prev = latestByHex.get(hex);
+				if (!prev || ts > (prev.timestamp || 0)) {
+					latestByHex.set(hex, pos);
+				}
+			});
+
+			// Remove tracks for aircraft no longer present
+			const currentHexes = new Set(Array.from(latestByHex.keys()));
+			Array.from(trackPolylines.keys()).forEach(hex => {
+				if (!currentHexes.has(hex)) {
+					const poly = trackPolylines.get(hex);
+					if (poly) tracksLayer.removeLayer(poly);
+					trackPolylines.delete(hex);
+					trackPoints.delete(hex);
+				}
+			});
+
+			// Check if a popup is open and get its hex
+			let openPopupHex = null;
+			map.eachLayer(layer => {
+				if (layer instanceof L.Marker && layer.isPopupOpen && layer.isPopupOpen()) {
+					openPopupHex = layer.options.hex;
+				}
+			});
+
+			for (const pos of latestByHex.values()) {
+				if (typeof pos.lat !== 'number' || typeof pos.lon !== 'number') continue;
+				
+				const hex = pos.hex || pos.HEX || pos.icao || pos.icao24;
+				if (!hex) continue;
+
+				const rot = (typeof pos.track === 'number' && !isNaN(pos.track)) ? pos.track : 0;
+				const icon = createAircraftLogoIcon(pos, rot, 40);
+				
+				let marker = markers.get(hex);
+
+				if (marker) {
+					// Update existing marker
+					marker.setLatLng([pos.lat, pos.lon]);
+					marker.setIcon(icon);
+					if (openPopupHex === hex) {
+						marker.setPopupContent(buildPopupHTML(pos));
+					}
+				} else {
+					// Create new marker
+					marker = L.marker([pos.lat, pos.lon], { icon, hex: hex }).addTo(map);
+					marker.bindPopup(buildPopupHTML(pos));
+					marker.on('click', function() {
+						map.closePopup();
+						marker.openPopup();
+					});
+					markers.set(hex, marker);
+				}
+
+				// --- Track logic ---
+				const pt = [pos.lat, pos.lon, pos.vertical_rate || 0];
+				if (!trackPoints.has(hex)) {
+					try {
+						const res = await fetch(`/api/track?hex=${encodeURIComponent(hex)}&minutes=10`);
+						if (!res.ok) throw new Error('API error');
+						const data = await res.json();
+						const rawPts = (data.track || []);
+						const ptsArr = rawPts.map(t => [t.lat, t.lon, t.vertical_rate || 0]);
+						if (ptsArr.length === 0 || (ptsArr[ptsArr.length-1][0] !== pt[0] || ptsArr[ptsArr.length-1][1] !== pt[1])) {
+							ptsArr.push(pt);
+						}
+						trackPoints.set(hex, ptsArr);
+					} catch (e) {
+						trackPoints.set(hex, [pt]);
+					}
+				}
+				
+				const pts = trackPoints.get(hex);
+				if (pts) {
+					const last = pts[pts.length-1];
+					if (!last || last[0] !== pt[0] || last[1] !== pt[1]) {
+						pts.push(pt);
+						if (pts.length > 300 && pts.length <= 500) {
+							while (pts.length > 250) {
+								for (let i = 1; i < pts.length - 1; i += 2) {
+									pts.splice(i, 1);
+								}
+							}
+						}
+						if (pts.length > 500) {
+							pts.splice(1, pts.length - 500); // Keep first point
+						}
+					}
+
+					const oldPoly = trackPolylines.get(hex);
+					if (oldPoly) tracksLayer.removeLayer(oldPoly);
+					
+					let lastColor = null, segment = [];
+					for (let i = 0; i < pts.length; i++) {
+						const color = getVerticalRateColor(pts[i][2] || 0);
+						if (lastColor !== null && color !== lastColor && segment.length > 1) {
+							const poly = L.polyline(segment, { color: lastColor, weight: 2, opacity: 0.7 });
+							tracksLayer.addLayer(poly);
+						}
+						if (lastColor === null || color !== lastColor) segment = [];
+						segment.push([pts[i][0], pts[i][1]]);
+						lastColor = color;
+					}
+					if (segment.length > 1) {
+						const poly = L.polyline(segment, { color: lastColor, weight: 2, opacity: 0.7 });
+						tracksLayer.addLayer(poly);
+						trackPolylines.set(hex, poly);
+					}
+				}
+			}
+
+			// Remove markers for aircraft that are no longer in the latest data
+			markers.forEach((marker, hex) => {
+				if (!currentHexes.has(hex)) {
+					map.removeLayer(marker);
+					markers.delete(hex);
+				}
+			});
+
+			// Re-open popup if it was closed by a redraw
+			if (openPopupHex && markers.has(openPopupHex)) {
+				const markerToReopen = markers.get(openPopupHex);
+				if (markerToReopen && !markerToReopen.isPopupOpen()) {
+					markerToReopen.openPopup();
+				}
+			}
+		}
+		async function fetchPositions() {
+			const start = performance.now();
+			try {
+				const res = await fetch('/api/positions?hours=1');
+				if (!res.ok) throw new Error('API error');
+				const data = await res.json();
+				updateMarkers(data.positions || []);
+				// Update cards
+				document.getElementById('card-aircraft-count').textContent = Object.keys((data.positions || []).reduce((acc, p) => {
+					const hex = p.hex || p.HEX || p.icao || p.icao24;
+					if (hex) acc[hex] = true;
+					return acc;
+				}, {})).length;
+				document.getElementById('card-position-count').textContent = (data.positions || []).length;
+				document.getElementById('card-load-time').textContent = ((performance.now() - start) / 1000).toFixed(2) + 's';
+			} catch (e) {
+				console.warn('Failed to fetch positions', e);
+				document.getElementById('card-aircraft-count').textContent = 'Error';
+				document.getElementById('card-position-count').textContent = 'Error';
+				document.getElementById('card-load-time').textContent = 'Error';
+			}
+		}
+		setInterval(fetchPositions, 1000);
+		fetchPositions();
+	</script>
+</body>
+</html>

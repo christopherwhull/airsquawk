@@ -142,8 +142,8 @@
                         <th data-sort="bodytype">Body Type</th>
                     <th data-sort="squawk">Squawk</th>
                     <th data-sort="alt" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="vert_rate" data-sort-numeric="true">Climb / Descent (ft/min)</th>
                     <th data-sort="speed" data-sort-numeric="true">Speed (kt)</th>
-                    <th data-sort="vert_rate" data-sort-numeric="true">Vert Rate (ft/min)</th>
                     <th data-sort="lat" data-sort-numeric="true">Lat</th>
                     <th data-sort="lon" data-sort-numeric="true">Lon</th>
                     <th data-sort="messages" data-sort-numeric="true">Messages</th>
@@ -324,16 +324,106 @@
             <button class="auto-hidden-refresh" onclick="loadSquawkTransitions()" title="Refresh" style="padding: 6px 15px; background: #42a5f5; color: #fff; border: none; border-radius: 4px; cursor: pointer;">🔄</button>
         </div>
         <div id="squawk-summary"></div>
+        
         <h3 style="color: #4caf50; border-bottom: 2px solid #66bb6a; padding-bottom: 8px; margin-top: 20px;">VFR (1200)</h3>
-        <ul id="vfr-transitions" style="list-style: none; padding: 0;"></ul>
+        <table id="vfr-transitions-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="timestamp" data-sort-numeric="true">Date/Time</th>
+                    <th data-sort="hex">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="reg">Registration</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="from">From Squawk</th>
+                    <th data-sort="to">To Squawk</th>
+                    <th data-sort="altitude" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="minutes" data-sort-numeric="true">Minutes Since Last</th>
+                </tr>
+            </thead>
+            <tbody id="vfr-transitions"></tbody>
+        </table>
+        
         <h3 style="color: #2196f3; border-bottom: 2px solid #42a5f5; padding-bottom: 8px; margin-top: 20px;">IFR LOW (0000-1777)</h3>
-        <ul id="ifr-low-transitions" style="list-style: none; padding: 0;"></ul>
+        <table id="ifr-low-transitions-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="timestamp" data-sort-numeric="true">Date/Time</th>
+                    <th data-sort="hex">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="reg">Registration</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="from">From Squawk</th>
+                    <th data-sort="to">To Squawk</th>
+                    <th data-sort="altitude" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="minutes" data-sort-numeric="true">Minutes Since Last</th>
+                </tr>
+            </thead>
+            <tbody id="ifr-low-transitions"></tbody>
+        </table>
+        
         <h3 style="color: #1976d2; border-bottom: 2px solid #1e88e5; padding-bottom: 8px; margin-top: 20px;">IFR HIGH (2000-7777)</h3>
-        <ul id="ifr-high-transitions" style="list-style: none; padding: 0;"></ul>
+        <table id="ifr-high-transitions-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="timestamp" data-sort-numeric="true">Date/Time</th>
+                    <th data-sort="hex">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="reg">Registration</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="from">From Squawk</th>
+                    <th data-sort="to">To Squawk</th>
+                    <th data-sort="altitude" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="minutes" data-sort-numeric="true">Minutes Since Last</th>
+                </tr>
+            </thead>
+            <tbody id="ifr-high-transitions"></tbody>
+        </table>
+        
         <h3 style="color: #f44336; border-bottom: 2px solid #e53935; padding-bottom: 8px; margin-top: 20px;">SPECIAL (7500/7600/7700)</h3>
-        <ul id="special-transitions" style="list-style: none; padding: 0;"></ul>
+        <table id="special-transitions-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="timestamp" data-sort-numeric="true">Date/Time</th>
+                    <th data-sort="hex">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="reg">Registration</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="from">From Squawk</th>
+                    <th data-sort="to">To Squawk</th>
+                    <th data-sort="altitude" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="minutes" data-sort-numeric="true">Minutes Since Last</th>
+                </tr>
+            </thead>
+            <tbody id="special-transitions"></tbody>
+        </table>
+        
         <h3 style="color: #9e9e9e; border-bottom: 2px solid #bdbdbd; padding-bottom: 8px; margin-top: 20px;">OTHER</h3>
-        <ul id="other-transitions" style="list-style: none; padding: 0;"></ul>
+        <table id="other-transitions-table" class="sortable">
+            <thead>
+                <tr>
+                    <th data-sort="timestamp" data-sort-numeric="true">Date/Time</th>
+                    <th data-sort="hex">ICAO</th>
+                    <th data-sort="flight">Flight</th>
+                    <th data-sort="reg">Registration</th>
+                    <th data-sort="type">Type</th>
+                    <th data-sort="manufacturer">Manufacturer</th>
+                    <th data-sort="airline">Airline</th>
+                    <th data-sort="from">From Squawk</th>
+                    <th data-sort="to">To Squawk</th>
+                    <th data-sort="altitude" data-sort-numeric="true">Altitude (ft)</th>
+                    <th data-sort="minutes" data-sort-numeric="true">Minutes Since Last</th>
+                </tr>
+            </thead>
+            <tbody id="other-transitions"></tbody>
+        </table>
     </div>
 
     <div id="heatmap-tab" class="tab-content">
@@ -416,7 +506,7 @@
         </div>
     </div>
 
-    <script src="http://localhost:3003/socket.io/socket.io.js"></script>
+    <script src="http://localhost:3003/socket.io/socket.io.js" onerror="console.error('Failed to load socket.io client')"></script>
     <script src="app.js"></script>
     <style>
     /* Hide refresh buttons by default; script will unhide ones with handlers */

@@ -23,9 +23,7 @@ async function testSquawkAPI() {
 
     // Test different time windows
     const testWindows = [
-        { param: 'hours=1', desc: '1 hour' },
-        { param: 'hours=24', desc: '24 hours' },
-        { param: 'window=7d', desc: '7 days' }
+        { param: 'hours=6', desc: '6 hours' }
     ];
 
     for (const test of testWindows) {

@@ -181,7 +181,7 @@ docker run -d -p 8181:8181 \
 **Token Setup:**
 ```bash
 # Create API token (save to runtime/tsdb_token.json)
-python tools/aircraft-tracker.py --create-tsdb-token
+python tools/aircraft_tracker.py --create-tsdb-token
 
 # Or set manually in config.json
 ```
@@ -217,7 +217,7 @@ docker run -d -p 8181:8181 \
 npm start
 
 # 6. Start data ingestion (optional)
-python tools/aircraft-tracker.py --enable-s3 --enable-tsdb
+python tools/aircraft_tracker.py --enable-s3 --enable-tsdb
 ```
 
 ### 4. Data Storage Comparison
@@ -748,12 +748,12 @@ For detailed setup instructions, see [MINIO_SETUP.md](MINIO_SETUP.md).
 
 **Console / Unicode**
 
-- The `aircraft-tracker.py` utility prints box-drawing characters for framed output. If your terminal does not use UTF-8, Python may raise a `UnicodeEncodeError`.
+- The `aircraft_tracker.py` utility prints box-drawing characters for framed output. If your terminal does not use UTF-8, Python may raise a `UnicodeEncodeError`.
 - Recommended ways to run with UTF-8 rendering:
-   - `python -X utf8 aircraft-tracker.py` — enable Python's UTF-8 mode
-   - In PowerShell: `chcp 65001` then `python aircraft-tracker.py`
+   - `python -X utf8 aircraft_tracker.py` — enable Python's UTF-8 mode
+   - In PowerShell: `chcp 65001` then `python aircraft_tracker.py`
    - Or set the environment for the session: ``$env:PYTHONIOENCODING='utf-8'`` then run the script
-- The script also supports a strict flag: `python aircraft-tracker.py --utf8-strict` — in strict mode the script will exit if the console cannot be configured for UTF-8. The default behavior is tolerant: unsupported characters are replaced so the script does not crash.
+- The script also supports a strict flag: `python aircraft_tracker.py --utf8-strict` — in strict mode the script will exit if the console cannot be configured for UTF-8. The default behavior is tolerant: unsupported characters are replaced so the script does not crash.
 - **Cache**: Position cache status and statistics
 
 ### Time Controls

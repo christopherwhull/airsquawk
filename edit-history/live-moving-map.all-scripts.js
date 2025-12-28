@@ -141,7 +141,7 @@
                 document.getElementById('debug-oldest-position').textContent = `${formatTs(oldestPositionTime)} (${formatAge(oldestPositionTime)})`;
                 document.getElementById('debug-newest-position').textContent = `${formatTs(newestPositionTime)} (${formatAge(newestPositionTime)})`;
             } catch (e) {
-                console.error("Error updating debug info:", e);
+                console.error('Error updating debug info:', e && (e.message || e)); if (e && e.stack) console.debug(e.stack);
                 document.getElementById('debug-aircraft-count').textContent = 'ERR';
             }
         }
@@ -729,15 +729,28 @@
         const HOVER_DEBOUNCE_MS = 150; // delay before fetching track on hover
 
         // Helper function for fetch with 30-second timeout
+        // Behavior / responsibilities:
+        // - Starts a controller that aborts the fetch after `timeoutMs` milliseconds.
+        // - Accepts an `options.signal` override so callers can provide their own AbortSignal.
+        // - Normalizes AbortError/timeouts into a `TimeoutError` (name set to 'TimeoutError') so callers
+        //   can detect and handle timeouts separately from other network errors.
+        // This centralizes timeout/abort handling and reduces repetitive boilerplate at call sites.
         async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            // Provide an explicit reason and convert AbortError to a TimeoutError so callers can detect timeouts
+            const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
             try {
                 const response = await fetch(url, { ...options, signal: options.signal || controller.signal });
                 clearTimeout(timeoutId);
                 return response;
             } catch (error) {
                 clearTimeout(timeoutId);
+                // Normalize abort/timeouts to a named TimeoutError for easier handling upstream
+                if (error && (error.name === 'AbortError' || (error.message && /aborted|timeout/i.test(error.message)))) {
+                    const te = new Error(`Fetch timed out after ${timeoutMs}ms`);
+                    te.name = 'TimeoutError';
+                    throw te;
+                }
                 throw error;
             }
         }
@@ -807,6 +820,10 @@
         // Track groups per hex for incremental updates
         let liveTrackGroups = new Map(); // hex -> LayerGroup
         let longTrackGroups = new Map(); // hex -> LayerGroup
+        // Record when we last fetched a live track for a hex so we avoid refetching on every poll.
+        // If a fetch failed and returned empty, we'll still record the attempt and only retry after RETRY_MS.
+        const LIVE_TRACK_FETCH_RETRY_MS = 5 * 60 * 1000; // 5 minutes
+        const liveTrackFetchedAt = new Map(); // hex -> timestamp (ms)
         
         // Add Live Tracks to the layers control
         if (window.layersControl) {
@@ -817,6 +834,8 @@
         try { window.liveTrackGroups = liveTrackGroups; window.longTrackGroups = longTrackGroups; } catch (e) {}
         
         let liveTracksIntervalId = null;
+        // Controller for cancelling in-flight live track batch fetches when a newer fetch is started
+        let liveTracksFetchAbortController = null;
         const LIVE_TRACKS_POLL_MS = 15000; // increased from 7s to 15s to reduce server load
 
         // Persistent tracks shown when user clicks with "Persist track on click" enabled
@@ -939,20 +958,28 @@
         }
 
         // POST /api/v2/track helper - V2 batch API
-        async function fetchTracksBatch(trackRequests) {
+        // Inputs: `trackRequests` is an array of { hex, minutes } objects (max ~20 per chunk when used here).
+        // Outputs: an array of track arrays (one per request) in the same order as `trackRequests`.
+        // Notes / behaviors:
+        // - Accepts optional `options` (e.g., `{ signal }`) so callers can cancel in-flight requests when starting a fresher fetch.
+        // - Converts timeouts/aborts into a TimeoutError (handled as debug by callers) and returns empty track arrays on error.
+        async function fetchTracksBatch(trackRequests, options = {}) {
             if (!Array.isArray(trackRequests) || trackRequests.length === 0) return [];
             try {
                 const res = await fetchWithTimeout('/api/v2/track', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ requests: trackRequests })
+                    body: JSON.stringify({ requests: trackRequests }),
+                    signal: options.signal
                 });
                 if (!res.ok) throw new Error(`V2 track batch ${res.status}`);
                 const payload = await res.json();
                 // Return array of track results in same order as requests
                 return payload.results ? payload.results.map(item => item ? item.track || [] : []) : [];
             } catch (err) {
-                console.warn('V2 track batch fetch failed', err);
+                // Timeouts / aborts can be noisy; surface as debug when appropriate
+                if (err && err.name === 'TimeoutError') console.debug('V2 track batch timed out', err.message);
+                else console.warn('V2 track batch fetch failed', err);
                 return trackRequests.map(() => []); // Return empty arrays for all requests on error
             }
         }
@@ -1243,7 +1270,7 @@
                                 longTrackGroups.set(chunk[idx], lg);
                                 anyDrawn = true;
                             }
-                        } catch (e) { console.warn('Long track segment draw error', e); }
+                        } catch (e) { console.warn('Long track segment draw error:', e && (e.message || e)); if (e && e.stack) console.debug(e.stack); }
                     });
                 }
                 if (!anyDrawn) { longTracksLayer.clearLayers(); setTrackStatus('Idle', 'idle'); }
@@ -1253,8 +1280,57 @@
                 try { updateDebugInfo(); } catch(e) {}
                 setTrackStatus(formatOkWithTime('OK (Long)'), 'ok');
             } catch (err) {
-                console.warn('Long tracks fetch/draw error', err);
+                console.warn('Long tracks fetch/draw error:', err && (err.message || err)); if (err && err.stack) console.debug(err.stack); }
                 setTrackStatus('Error', 'error');
+            }
+        }
+
+        // Helper: ensure we have an initial live track for a single hex by fetching the V2 batch for that hex once.
+        // This keeps the initial 'track fetch' work bounded to the first time we see a hex; subsequent updates come
+        // from position updates handled by `doUpdateLiveMarkers` (which appends new points to existing track groups).
+        async function ensureLiveTrackForHex(hex, minutes) {
+            try {
+                const key = (hex || '').toString().toLowerCase();
+                if (!key) return;
+                if (liveTrackGroups.has(key)) return;
+                const last = liveTrackFetchedAt.get(key) || 0;
+                if (last && (Date.now() - last) < LIVE_TRACK_FETCH_RETRY_MS) return; // recently attempted
+                liveTrackFetchedAt.set(key, Date.now());
+                const results = await fetchTracksBatch([{ hex: key, minutes }]);
+                const pts = results && results.length ? results[0] : [];
+                if (pts && pts.length >= 2) {
+                    try {
+                        addVerticalRatesToTrackPoints(pts);
+                        if (maxTrackAngularChange(pts) < 10) pts = [pts[0], pts[pts.length - 1]];
+                        const hg = L.layerGroup();
+                        const segments = [];
+                        let currentSegment = { points: [pts[0]], color: getVerticalRateColor(pts[0].vertical_rate || 0) };
+                        for (let j = 1; j < pts.length; j++) {
+                            const point = pts[j];
+                            const color = getVerticalRateColor(point.vertical_rate || 0);
+                            if (color === currentSegment.color) currentSegment.points.push(point);
+                            else { segments.push(currentSegment); currentSegment = { points: [point], color }; }
+                        }
+                        segments.push(currentSegment);
+                        segments.forEach(segment => {
+                            if (segment.points.length >= 2) {
+                                const latlngs = densifyTrackPoints(segment.points, 0.1);
+                                const poly = L.polyline(latlngs, { color: segment.color, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                hg.addLayer(poly);
+                            }
+                        });
+                        const start = L.circleMarker([pts[0].lat, pts[0].lon], { radius: 3, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
+                        const end = L.circleMarker([pts[pts.length - 1].lat, pts[pts.length - 1].lon], { radius: 3, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
+                        hg.addLayer(start); hg.addLayer(end);
+                        liveTracksLayer.addLayer(hg);
+                        liveTrackGroups.set(key, hg);
+                    } catch (e) {
+                        console.warn('ensureLiveTrackForHex: draw failed for', key, e && (e.message || e)); if (e && e.stack) console.debug(e.stack);
+                    }
+                }
+            } catch (err) {
+                if (err && err.name === 'TimeoutError') console.debug('ensureLiveTrackForHex: timed out', hex, err.message);
+                else console.warn('ensureLiveTrackForHex: fetch failed for', hex, err && (err.message || err));
             }
         }
 
@@ -1295,79 +1371,109 @@
 
                 // Use V2 batch API for tracks (respect 20 request limit)
                 let anyDrawn = false;
-                // Parallelize chunk requests for responsiveness
-                const chunkPromises = [];
-                for (let i = 0; i < visible.length; i += 20) {
-                    const chunk = visible.slice(i, i + 20);
-                    const trackRequests = chunk.map(hx => ({ hex: hx, minutes }));
-                    chunkPromises.push(fetchTracksBatch(trackRequests).then(trackArrays => ({ chunk, trackArrays })).catch(e => ({ chunk, trackArrays: [], error: e })));
-                }
-                const chunkResults = await Promise.all(chunkPromises);
-                chunkResults.forEach(cr => {
-                    try {
-                        const { chunk, trackArrays, error } = cr;
-                        if (error) {
-                            console.warn('Track batch failed for chunk', chunk, error);
-                            return;
-                        }
-                        trackArrays.forEach((pts, idx) => {
-                            try {
-                                const hx = chunk[idx];
-                                // remove any existing group for this hex - we'll replace it
-                                if (liveTrackGroups.has(hx)) {
-                                    try { const old = liveTrackGroups.get(hx); liveTracksLayer.removeLayer(old); } catch (e) {}
-                                    liveTrackGroups.delete(hx);
-                                }
 
-                                if (pts && pts.length >= 2) {
-                                    // Compute vertical rate per point
-                                    addVerticalRatesToTrackPoints(pts);
-
-                                    // Simplify if essentially straight
-                                    if (maxTrackAngularChange(pts) < 10) pts = [pts[0], pts[pts.length - 1]];
-
-                                    // Create a group to hold all segments & markers for this hex
-                                    const hg = L.layerGroup();
-                                    const segments = [];
-                                    let currentSegment = { points: [pts[0]], color: getVerticalRateColor(pts[0].vertical_rate || 0) };
-                                    for (let i = 1; i < pts.length; i++) {
-                                        const point = pts[i];
-                                        const color = getVerticalRateColor(point.vertical_rate || 0);
-                                        if (color === currentSegment.color) { currentSegment.points.push(point); }
-                                        else { segments.push(currentSegment); currentSegment = { points: [point], color }; }
-                                    }
-                                    segments.push(currentSegment);
-
-                                    // Draw each segment into the group
-                                    segments.forEach(segment => {
-                                        if (segment.points.length >= 2) {
-                                            const latlngs = densifyTrackPoints(segment.points, 0.1);
-                                            const poly = L.polyline(latlngs, { color: segment.color, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
-                                            hg.addLayer(poly);
-                                            anyDrawn = true;
-                                        }
-                                    });
-
-                                    // Add start/end markers
-                                    const start = L.circleMarker([pts[0].lat, pts[0].lon], { radius: 3, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
-                                    const end = L.circleMarker([pts[pts.length - 1].lat, pts[pts.length - 1].lon], { radius: 3, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.9, pane: 'livePane' });
-                                    hg.addLayer(start); hg.addLayer(end);
-
-                                    // Add to live tracks layer and record in map
-                                    liveTracksLayer.addLayer(hg);
-                                    liveTrackGroups.set(hx, hg);
-                                    anyDrawn = true;
-                                }
-                            } catch (e) { console.warn('Live track segment draw error', e); }
-                        });
-                    } catch (e) { console.warn('Error processing chunk result', e); }
+                // Only fetch tracks for hexes that need it (no existing liveTrackGroups or stale retry time)
+                const nowTs = Date.now();
+                const needFetch = visible.filter(hx => {
+                    if (liveTrackGroups.has(hx)) return false;
+                    const last = liveTrackFetchedAt.get(hx) || 0;
+                    if (last && (nowTs - last) < LIVE_TRACK_FETCH_RETRY_MS) return false;
+                    return true;
                 });
+
+                if (needFetch.length === 0) {
+                    // Nothing new to fetch; ensure existing live tracks are visible and set status
+                    if (!map.hasLayer(liveTracksLayer) && liveTrackGroups.size > 0) liveTracksLayer.addTo(map);
+                    try { updateDebugInfo(); } catch (e) {}
+                    setTrackStatus(formatOkWithTime('OK (Live)'), 'ok');
+                    // skip further fetching
+                } else {
+                    // If a previous live tracks fetch is in-flight, cancel it so we don't render stale results
+                    try { if (liveTracksFetchAbortController) { liveTracksFetchAbortController.abort('new-fetch'); } } catch (e) {}
+                    const controller = new AbortController();
+                    liveTracksFetchAbortController = controller;
+
+                    // Parallelize chunk requests for responsiveness; process each chunk as it resolves so drawing is incremental
+                    const chunkPromises = [];
+                    for (let i = 0; i < needFetch.length; i += 20) {
+                        const chunk = needFetch.slice(i, i + 20);
+                        const trackRequests = chunk.map(hx => ({ hex: hx, minutes }));
+                    const p = fetchTracksBatch(trackRequests, { signal: controller.signal })
+                        .then(trackArrays => {
+                            try {
+                                // Each item in `trackArrays` corresponds to the request at the same index in `chunk`.
+                                // `pts` is the track array for hex = chunk[idx]. We guard per-pts processing so a problem with
+                                // one hex does not abort processing of the rest of the chunk.
+                                trackArrays.forEach((pts, idx) => {
+                                    try {
+                                        const hx = chunk[idx];
+                                        // remove any existing group for this hex - we'll replace it
+                                        if (liveTrackGroups.has(hx)) {
+                                            try { const old = liveTrackGroups.get(hx); liveTracksLayer.removeLayer(old); } catch (e) {}
+                                            liveTrackGroups.delete(hx);
+                                        }
+
+                                        if (pts && pts.length >= 2) {
+                                            // Compute vertical rate per point
+                                            addVerticalRatesToTrackPoints(pts);
+
+                                            // Simplify if essentially straight
+                                            if (maxTrackAngularChange(pts) < 10) pts = [pts[0], pts[pts.length - 1]];
+
+                                            // Draw segments
+                                            const segments = [];
+                                            let currentSegment = { points: [pts[0]], color: getVerticalRateColor(pts[0].vertical_rate || 0) };
+                                            for (let j = 1; j < pts.length; j++) {
+                                                const point = pts[j];
+                                                const color = getVerticalRateColor(point.vertical_rate || 0);
+                                                if (color === currentSegment.color) currentSegment.points.push(point);
+                                                else { segments.push(currentSegment); currentSegment = { points: [point], color }; }
+                                            }
+                                            segments.push(currentSegment);
+
+                                            segments.forEach(segment => {
+                                                if (segment.points.length >= 2) {
+                                                    const latlngs = densifyTrackPoints(segment.points, 0.1);
+                                                    const poly = L.polyline(latlngs, { color: segment.color, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
+                                                    longTracksLayer.addLayer(poly);
+                                                    anyDrawn = true;
+                                                }
+                                            });
+
+                                            // Start/end markers
+                                            const startLatLng = [pts[0].lat, pts[0].lon];
+                                            const endLatLng = [pts[pts.length - 1].lat, pts[pts.length - 1].lon];
+                                            const start = L.circleMarker(startLatLng, { radius: 4, fillColor: '#00ff00', color: '#006600', weight: 1, fillOpacity: 0.95, pane: 'persistentPane' });
+                                            const end = L.circleMarker(endLatLng, { radius: 4, fillColor: '#ff0000', color: '#660000', weight: 1, fillOpacity: 0.95, pane: 'persistentPane' });
+                                            const lg = L.layerGroup([poly, start, end]);
+                                            try { if (longTrackGroups.has(chunk[idx])) { const old = longTrackGroups.get(chunk[idx]); longTracksLayer.removeLayer(old); longTrackGroups.delete(chunk[idx]); } } catch (e) {}
+                                            longTracksLayer.addLayer(lg);
+                                            longTrackGroups.set(chunk[idx], lg);
+                                        }
+                                    } catch (e) { console.warn('Long track chunk draw error:', e && (e.message || e)); if (e && e.stack) console.debug(e.stack); }
+                                });
+                            } catch (e) { console.warn('Track chunk processing failed:', e && (e.message || e)); if (e && e.stack) console.debug(e.stack); }
+                        })
+                        .catch(err => {
+                            if (err && err.name === 'TimeoutError') console.debug('Track batch timed out for chunk', chunk, err.message);
+                            else { console.warn('Track batch failed for chunk:', chunk, err && (err.message || err)); if (err && err.stack) console.debug(err.stack); }
+                        });
+                    chunkPromises.push(p);
+                }
+
+                // Wait for all chunks to settle so we can update final status and ensure layer visibility
+                await Promise.allSettled(chunkPromises);
+                if (!anyDrawn) { longTracksLayer.clearLayers(); setTrackStatus('Idle', 'idle'); }
+                // ensure the layer is on the map
+                if (!map.hasLayer(longTracksLayer) && anyDrawn) longTracksLayer.addTo(map);
+                try { updateDebugInfo(); } catch(e) {}
+                if (anyDrawn) setTrackStatus(formatOkWithTime('OK (Long)'), 'ok'); else setTrackStatus('Idle', 'idle');
                 if (!anyDrawn) { liveTracksLayer.clearLayers(); setTrackStatus('Idle', 'idle'); }
                 if (!map.hasLayer(liveTracksLayer)) liveTracksLayer.addTo(map);
                 try { updateDebugInfo(); } catch(e) {}
                 setTrackStatus(formatOkWithTime('OK (Live)'), 'ok');
             } catch (err) {
-                console.warn('Live tracks fetch/draw error', err);
+                console.warn('Live tracks fetch/draw error:', err && (err.message || err)); if (err && err.stack) console.debug(err.stack); }
                 setTrackStatus('Error', 'error');
             }
         }
@@ -2389,6 +2495,14 @@
                                         liveLayer.addLayer(tr);
                                     }
 
+                                    // Ensure we have an initial live track for this hex (fetch once only). This runs asynchronously
+                                    try {
+                                        const minutesElem = document.getElementById('track-window-input');
+                                        const minutes = minutesElem ? Math.max(1, parseInt(minutesElem.value, 10) || 1) : 1;
+                                        // fire-and-forget; ensureLiveTrackForHex will no-op if already fetched
+                                        ensureLiveTrackForHex(hex, minutes).catch(e => { if (e && e.name === 'TimeoutError') console.debug('ensureLiveTrackForHex timed out for', hex); else console.warn('ensureLiveTrackForHex failed for', hex, e && (e.message || e)); });
+                                    } catch (e) {}
+
                                     // Incrementally update live track group and long track group (append new point)
                                     try {
                                         if (liveTrackGroups.has(hex)) {
@@ -2457,7 +2571,6 @@
                                         } catch (e) {}
                                     } catch (e) {}
                                 }
-
                                 else {
                                     // remove any existing short trail if we don't have at least two points
                                     if (liveTrails.has(hex)) {

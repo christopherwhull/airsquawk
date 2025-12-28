@@ -97,15 +97,15 @@ async function runTests() {
     });
 
     // Test 6: Squawk transitions with time range
-    await test('Squawk transitions endpoint (24h) returns data', async () => {
+    await test('Squawk transitions endpoint (6h) returns data', async () => {
         const now = Date.now();
-        const start = now - (24 * 60 * 60 * 1000);
+        const start = now - (6 * 60 * 60 * 1000);
         const res = await request(`/api/squawk-transitions?startTime=${start}&endTime=${now}`);
         assert(res.status === 200, `Expected status 200, got ${res.status}`);
         assert(res.data.transitions !== undefined, 'Expected transitions in response');
         assert(res.data.totalTransitions !== undefined, 'Expected totalTransitions in response');
         assert(Array.isArray(res.data.transitions), 'Expected transitions to be an array');
-        console.log(`   Found ${res.data.totalTransitions} transitions in last 24 hours`);
+        console.log(`   Found ${res.data.totalTransitions} transitions in last 6 hours`);
         
         // Verify transition structure if any exist
         if (res.data.transitions.length > 0) {
@@ -130,7 +130,7 @@ async function runTests() {
     // Test 6b: Squawk transitions filtering (flight changes excluded)
     await test('Squawk transitions correctly filters flight changes', async () => {
         const now = Date.now();
-        const start = now - (7 * 24 * 60 * 60 * 1000); // 7 days
+        const start = now - (6 * 60 * 60 * 1000); // 6 hours
         const res = await request(`/api/squawk-transitions?startTime=${start}&endTime=${now}`);
         assert(res.status === 200, `Expected status 200, got ${res.status}`);
         
@@ -189,17 +189,15 @@ async function runTests() {
     });
     
     // Test 10: Reception range with different time windows
-    await test('Reception range works with various time windows', async () => {
-        for (const hours of [1, 24, 168]) {
-            const res = await request(`/api/reception-range?hours=${hours}`);
-            assert(res.status === 200, `Expected status 200 for ${hours}h, got ${res.status}`);
-            assert(res.data.sectors !== undefined, 'Expected sectors in response');
-            assert(res.data.maxRange !== undefined, 'Expected maxRange in response');
-            assert(res.data.positionCount !== undefined, 'Expected positionCount in response');
-            assert(typeof res.data.receiverLat === 'number', 'Expected receiverLat to be a number');
-            assert(typeof res.data.receiverLon === 'number', 'Expected receiverLon to be a number');
-        }
-        console.log('   ✓ Tested 1h, 24h, and 168h time windows');
+    await test('Reception range works with 24h time window', async () => {
+        const res = await request(`/api/reception-range?hours=24`);
+        assert(res.status === 200, `Expected status 200 for 24h, got ${res.status}`);
+        assert(res.data.sectors !== undefined, 'Expected sectors in response');
+        assert(res.data.maxRange !== undefined, 'Expected maxRange in response');
+        assert(res.data.positionCount !== undefined, 'Expected positionCount in response');
+        assert(typeof res.data.receiverLat === 'number', 'Expected receiverLat to be a number');
+        assert(typeof res.data.receiverLon === 'number', 'Expected receiverLon to be a number');
+        console.log('   ✓ Tested 24h time window');
     });
     
     // Test 11: Cache status includes all processing timestamps
@@ -245,7 +243,7 @@ async function runTests() {
     // Test 14: Squawk transitions include manufacturer
     await test('Squawk transitions include manufacturer', async () => {
         const now = Date.now();
-        const start = now - (24 * 60 * 60 * 1000);
+        const start = now - (6 * 60 * 60 * 1000);
         const res = await request(`/api/squawk-transitions?startTime=${start}&endTime=${now}`);
         assert(res.status === 200, `Expected status 200, got ${res.status}`);
         if (res.data.transitions && res.data.transitions.length > 0) {

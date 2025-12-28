@@ -13,8 +13,22 @@ const io = socketIo(server, {
     }
 });
 
-// Store the latest live data
-let latestLiveData = null;
+// Store the latest live data with a TTL so stale updates are not replayed forever
+const LIVE_DATA_TTL_MS = Number(process.env.LIVE_DATA_TTL_MS || 60 * 1000);
+let latestLiveData = null; // shape: { payload, ts }
+
+function setLatestLiveData(payload) {
+    latestLiveData = { payload, ts: Date.now() };
+}
+
+function getFreshLiveData() {
+    if (!latestLiveData) return null;
+    if ((Date.now() - latestLiveData.ts) > LIVE_DATA_TTL_MS) {
+        latestLiveData = null;
+        return null;
+    }
+    return latestLiveData.payload;
+}
 
 initializeW3CLogger({ server: { w3cLogDir: 'logs' } });
 app.use(logW3C);
@@ -24,8 +38,9 @@ io.on('connection', (socket) => {
     logger.info('WebSocket client connected');
 
     // Send latest data immediately on connection
-    if (latestLiveData) {
-        socket.emit('liveUpdate', latestLiveData);
+    const fresh = getFreshLiveData();
+    if (fresh) {
+        socket.emit('liveUpdate', fresh);
     }
 
     socket.on('disconnect', () => {
@@ -36,8 +51,9 @@ io.on('connection', (socket) => {
 // Endpoint for main server to push live updates
 app.post('/api/live-update', express.json(), (req, res) => {
     try {
-        latestLiveData = req.body;
-        io.emit('liveUpdate', latestLiveData);
+        const payload = req.body;
+        setLatestLiveData(payload);
+        io.emit('liveUpdate', payload);
         res.json({ success: true });
     } catch (error) {
         logger.error('Error processing live update:', error);
@@ -53,6 +69,14 @@ app.get('/health', (req, res) => {
         uptime: process.uptime()
     });
 });
+
+setInterval(() => {
+    if (!latestLiveData) return;
+    if ((Date.now() - latestLiveData.ts) > LIVE_DATA_TTL_MS) {
+        latestLiveData = null;
+        logger.debug ? logger.debug('Cleared stale WebSocket live data cache') : logger.info('Cleared stale WebSocket live data cache');
+    }
+}, Math.min(LIVE_DATA_TTL_MS, 5000));
 
 const WEBSOCKET_PORT = process.env.WEBSOCKET_PORT || 3003;
 

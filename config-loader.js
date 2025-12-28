@@ -148,12 +148,12 @@ class ConfigLoader {
     return this.get('buckets');
   }
 
-  get state() {
-    return this.get('state');
+  get storage() {
+    return this.get('storage');
   }
 
-  get s3() {
-    return this.get('s3');
+  get state() {
+    return this.get('state');
   }
 
   get retention() {

@@ -9,7 +9,7 @@ const path = require('path');
 const proj4 = require('proj4');
 
 const app = express();
-const PORT = process.env.GEOTIFF_PORT || 3003;
+const PORT = process.env.GEOTIFF_PORT || 3004;
 const config = require('./config');
 
 // Tile cache configuration

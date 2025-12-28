@@ -1,0 +1,1 @@
+SELECT COUNT(*) FROM aircraft_positions_v2;

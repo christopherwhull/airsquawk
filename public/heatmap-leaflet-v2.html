@@ -649,7 +649,7 @@
         }
         
         // Function to reload squawk transitions data for current time range
-        function loadSquawkTransitionsData() {
+        window.loadSquawkTransitionsData = function() {
             if (!squawkTransitionsLayer) {
                 console.warn('Squawk transitions layer not initialized yet');
                 return;
@@ -681,7 +681,7 @@
             const hours = windowToHours(timeWindow);
             console.log('Using time window:', timeWindow, 'converted to hours:', hours);
             
-            fetch(`/api/squawk-transitions-map?hours=${hours}`)
+            fetchWithTimeout(`/api/squawk-transitions-map?hours=${hours}`)
                 .then(response => {
                     console.log('Squawk transitions reload API response:', response.status);
                     return response.json();
@@ -704,7 +704,7 @@
                             const popupContent = `
                                 <div style="font-family: Arial, sans-serif; font-size: 12px;">
                                     <strong>Squawk Transition</strong><br>
-                                    Aircraft: ${transition.hex || transition.icao || 'Unknown'}<br>
+                                    Aircraft: ${ (transition.callsign || transition.ident) ? `<a href="https://flightaware.com/live/flight/${encodeURIComponent((transition.callsign||transition.ident).trim())}" target="_blank" rel="noopener noreferrer">${transition.callsign || transition.ident}</a>` : (transition.hex || transition.icao) ? `${transition.hex || transition.icao}` : 'Unknown'}<br>
                                     From: ${transition.from} → To: ${transition.to}<br>
                                     Time: ${new Date(transition.timestamp).toLocaleString()}<br>
                                     Position: ${transition.lat.toFixed(4)}, ${transition.lon.toFixed(4)}
@@ -722,7 +722,7 @@
                     console.log('Squawk transitions data reloaded with', data.transitions.length, 'markers');
                 })
                 .catch(error => console.error('Failed to reload squawk transitions:', error));
-        }
+        };
         
         // Load initial squawk transitions data
         loadSquawkTransitionsData();
@@ -1048,9 +1048,25 @@
         let hoverFetchTimer = null;
         let hoverClearTimer = null;
         const HOVER_DEBOUNCE_MS = 150; // delay before fetching track on hover
+
+        // Helper function for fetch with 30-second timeout
+        async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const response = await fetch(url, { ...options, signal: options.signal || controller.signal });
+                clearTimeout(timeoutId);
+                return response;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                throw error;
+            }
+        }
         const HOVER_CLEAR_MS = 200; // delay before clearing hover track on mouseout
         // Map of flight poller intervals (hex -> intervalId) used to poll /api/flight every second
         const flightPollers = new Map();
+        let pendingFlightRequests = 0;
+        const MAX_PENDING_FLIGHT_REQUESTS = 3;
         // Batch flight cache (icao -> { ts, data }) to avoid excessive UI updates
         const BATCH_FLIGHT_TTL = 5000; // 5s
         const flightsCache = new Map();
@@ -1076,7 +1092,7 @@
             const cached = aircraftInfoCache.get(key);
             if (cached && (Date.now() - cached.ts) < AIRCRAFT_CACHE_TTL) return cached.data;
             try {
-                const res = await fetch(`/api/aircraft/${encodeURIComponent(key)}`);
+                const res = await fetchWithTimeout(`/api/aircraft/${encodeURIComponent(key)}`);
                 if (!res.ok) return null;
                 const data = await res.json();
                 aircraftInfoCache.set(key, { ts: Date.now(), data });
@@ -1089,7 +1105,7 @@
         // Load airline name-to-code mapping for logo lookup
         async function loadAirlineMapping() {
             try {
-                const res = await fetch('/api/airlines');
+                const res = await fetchWithTimeout('/api/airlines');
                 if (!res.ok) return;
                 const airlines = await res.json();
                 // Populate the mapping: name -> code
@@ -1127,7 +1143,7 @@
         try { window.longTracksLayer = longTracksLayer; } catch (e) {}
         let longTracksIntervalId = null;
         const LONG_TRACKS_POLL_MS = 30000; // increased from 15s to 30s to reduce server load
-        const LONG_TRACKS_BATCH_SIZE = 8; // chunk size for parallel requests
+        const LONG_TRACKS_BATCH_SIZE = 32; // chunk size for parallel requests
         // Initialize persisted indicator (safe now that persistentTracks exists)
         if (typeof updatePersistedIndicator === 'function') updatePersistedIndicator();
 
@@ -1156,8 +1172,14 @@
             if (flightPollers.has(key)) return; // already polling
 
             async function pollOnce() {
+                // Limit concurrent requests to avoid backing up
+                if (pendingFlightRequests >= MAX_PENDING_FLIGHT_REQUESTS) {
+                    return;
+                }
+                
+                pendingFlightRequests++;
                 try {
-                    const res = await fetch(`/api/flight?icao=${encodeURIComponent(key)}`);
+                    const res = await fetchWithTimeout(`/api/flight?icao=${encodeURIComponent(key)}`, {}, 3000);
                     if (!res.ok) return;
                     const payload = await res.json();
                     const fl = payload && payload.flight;
@@ -1185,6 +1207,8 @@
                     }
                 } catch (err) {
                     // silent
+                } finally {
+                    pendingFlightRequests--;
                 }
             }
 
@@ -1208,7 +1232,7 @@
         async function fetchTracksBatch(trackRequests) {
             if (!Array.isArray(trackRequests) || trackRequests.length === 0) return [];
             try {
-                const res = await fetch('/api/v2/track', {
+                const res = await fetchWithTimeout('/api/v2/track', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ requests: trackRequests })
@@ -1244,7 +1268,7 @@
             const promises = toFetch.map(async (lk) => {
                 try {
                     const url = `${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`;
-                    const res = await fetch(url);
+                    const res = await fetchWithTimeout(url);
                     if (!res.ok) return null;
                     const payload = await res.json();
                     const sq = payload && (payload.squawk || payload.sqk || null);
@@ -1273,7 +1297,7 @@
             while ((Date.now() - start) < timeoutMs) {
                 try {
                     const apiBase = getSquawkApiBase();
-                    const res = await fetch(`${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`);
+                    const res = await fetchWithTimeout(`${apiBase.replace(/\/$/, '')}/squawk?hex=${encodeURIComponent(lk)}`);
                     if (res && res.ok) {
                         try {
                             const payload = await res.json();
@@ -1790,10 +1814,36 @@
             const squawk = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || p.squawk_code || (lastSquawk.has(hexKey) ? lastSquawk.get(hexKey) : '') || '';
             const reg = p.registration || p.Registration || p.reg || p.Reg || p.tail || '';
             const airline = p.airline || p.operator || p.operator_name || p.airline_name || p.airlineName || '';
-            // Altitude: accept alt, altitude, A lt variants, or max_alt_ft from batch
-            const rawAlt = (p.alt ?? p.altitude ?? p.Alt ?? p.Altitude ?? p.max_alt_ft ?? p.max_alt ?? p.alt_ft ?? '');
-            const altNum = Number(rawAlt);
-            const alt = (rawAlt !== '' && rawAlt != null && Number.isFinite(altNum)) ? `${altNum.toLocaleString()} ft` : (rawAlt || '');
+            // Altitude: accept many variants and convert meters to feet where provided
+            let altVal = null;
+            if (p.alt !== undefined) altVal = p.alt;
+            else if (p.altitude !== undefined) altVal = p.altitude;
+            else if (p.Alt !== undefined) altVal = p.Alt;
+            else if (p.Altitude !== undefined) altVal = p.Altitude;
+            else if (p.altitude_ft !== undefined) altVal = p.altitude_ft;
+            else if (p.max_alt_ft !== undefined) altVal = p.max_alt_ft;
+            else if (p.max_alt !== undefined) altVal = p.max_alt;
+            else if (p.alt_ft !== undefined) altVal = p.alt_ft;
+            else if (p.alt_baro !== undefined) altVal = p.alt_baro;
+            else if (p.altitude_m !== undefined) altVal = Number(p.altitude_m) * 3.28084;
+            else if (p.alt_m !== undefined) altVal = Number(p.alt_m) * 3.28084;
+            else altVal = '';
+            const altNum = Number(altVal);
+            let alt = '';
+            if (Number.isFinite(altNum)) {
+                alt = `${Math.round(altNum).toLocaleString()} ft`;
+            } else if (typeof altVal === 'string' && altVal.trim() !== '') {
+                const fl = altVal.trim().match(/^FL(\d+)$/i);
+                if (fl && fl[1]) {
+                    const flFeet = Number(fl[1]) * 100;
+                    if (Number.isFinite(flFeet)) alt = `${flFeet.toLocaleString()} ft`;
+                    else alt = altVal.trim();
+                } else {
+                    alt = altVal.trim();
+                }
+            } else {
+                alt = '';
+            }
 
             // Calculate vertical rate for color coding
             let verticalRate = 0;
@@ -1823,11 +1873,22 @@
             const track = (trackVal !== '' && trackVal != null) ? trackVal : '';
             const lat = (p.lat || p.latitude || p.Lat) || '';
             const lon = (p.lon || p.longitude || p.Lon) || '';
-            // Calculate age in seconds since last update
-            const timeStr = p.timestamp ? (() => {
-                const timestamp = isNaN(Number(p.timestamp)) ? new Date(p.timestamp).getTime() : Number(p.timestamp);
-                const ageSeconds = Math.floor((Date.now() - timestamp) / 1000);
-                return ageSeconds >= 0 ? `${ageSeconds}s ago` : '—';
+            // Calculate age in seconds since last update (support many timestamp fields and seconds/ms formats)
+            function normalizeTimestamp(v) {
+                if (v === undefined || v === null || v === '') return null;
+                if (typeof v === 'number') return (v < 1e11) ? v * 1000 : v;
+                const nv = Number(v);
+                if (!Number.isNaN(nv)) return (nv < 1e11) ? nv * 1000 : nv;
+                const parsed = Date.parse(v);
+                if (!Number.isNaN(parsed)) return parsed;
+                return null;
+            }
+            const tsCandidate = (p.timestamp ?? p.ts ?? p.time ?? p.time_ts ?? p.time_utc ?? p.lastSeen ?? p.last_seen ?? p.t) || null;
+            const tsMs = normalizeTimestamp(tsCandidate);
+            const timeStr = (tsMs && Number.isFinite(tsMs)) ? (() => {
+                const ageSeconds = Math.floor((Date.now() - tsMs) / 1000);
+                if (ageSeconds < 0 || ageSeconds > (5 * 365 * 24 * 3600)) return '—';
+                return `${ageSeconds}s ago`;
             })() : '—';
             // Aircraft type
             const aircraftType = p.type || p.aircraft_type || p.t || p.TPE || '';
@@ -1878,7 +1939,31 @@
             if (trackFetchPromises.has(key)) return trackFetchPromises.get(key);
 
             const promise = (async () => {
-                const res = await fetch(`/api/track?hex=${encodeURIComponent(hex)}&minutes=${minutes}`);
+                // Use track cache service for last 15 minutes (900 seconds)
+                if (minutes <= 15) {
+                    try {
+                        const res = await fetchWithTimeout(`/api/track-cache/track/${encodeURIComponent(hex)}`);
+                        if (res.ok) {
+                            const payload = await res.json();
+                            const pts = (payload.positions || []).map(t => ({
+                                lat: t.lat,
+                                lon: t.lon,
+                                alt: t.altitude || null
+                            }));
+                            trackCache.set(key, { ts: Date.now(), data: pts });
+                            setTimeout(() => {
+                                const e = trackCache.get(key);
+                                if (e && ((Date.now() - e.ts) >= TRACK_CACHE_TTL_MS)) trackCache.delete(key);
+                            }, TRACK_CACHE_TTL_MS + 500);
+                            return { points: pts, cached: false };
+                        }
+                    } catch (err) {
+                        // Fall through to regular API if cache fails
+                    }
+                }
+                
+                // Fallback to regular track API for longer periods or if cache fails
+                const res = await fetchWithTimeout(`/api/track?hex=${encodeURIComponent(hex)}&minutes=${minutes}`);
                 if (!res.ok) throw new Error(`Track API ${res.status}`);
                 const payload = await res.json();
                 // Normalize track points: accept several common field names and include altitude when available.
@@ -2175,9 +2260,9 @@
 
             // Determine color filter based on vertical rate (feet per minute)
             let colorFilter = 'none'; // default no filter
-            if (verticalRate > 500) {
+            if (verticalRate > 200) {
                 colorFilter = 'sepia(1) hue-rotate(90deg) saturate(2)'; // green for climbing
-            } else if (verticalRate < -300) {
+            } else if (verticalRate < -200) {
                 colorFilter = 'sepia(1) hue-rotate(-50deg) saturate(2)'; // red for descending
             }
 
@@ -2245,7 +2330,7 @@
                 <rect x="22" y="30" width="2" height="1.5" rx="0.3" fill="#666666" opacity="0.5"/>
             </svg>`;
 
-            const html = `<div style="transform: rotate(${rotation}deg); width: ${finalSize}px; height:${finalSize}px; display:flex; align-items:center; justify-content:center">${imgHtml}</div>`;
+            const html = `<div style="transform: rotate(${rotation}deg); width: ${finalSize}px; height:${finalSize}px; display:flex; align-items:center; justify-content:center; ${bgStyle} ${glowStyle}">${imgHtml}</div>`;
             return L.divIcon({ html, className: 'aircraft-logo-icon', iconSize: [finalSize, finalSize], iconAnchor: [finalSize/2, finalSize/2] });
         }
 
@@ -2318,7 +2403,7 @@
                 // Live positions are always enabled, so always use a short window (1 hour) for live marker polling
                 hours = 1;
                 // Fetch live positions from backend `/api/positions` using selected time window
-                const res = await fetch(`/api/positions?hours=${hours}`);
+                const res = await fetchWithTimeout(`/api/positions?hours=${hours}`);
                 if (!res.ok) throw new Error(`Positions API error: ${res.status}`);
                 const payload = await res.json();
                 // Server returns { aircraftCount, positions } — normalize to an array
@@ -2381,7 +2466,7 @@
                     });
                     if (needed.length > 0) {
                         // POST { icao24: [...] } expected by server
-                        const batchRes = await fetch('/api/aircraft/batch', {
+                        const batchRes = await fetchWithTimeout('/api/aircraft/batch', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ icao24: needed })
@@ -3117,7 +3202,7 @@
                 const url = `/api/heatmap-data?${params.toString()}`;
                 console.log(`Loading grid data with URL params: source=${source}, hours=${hours}, gridSizeNm=${gridSizeNm}; fetching ${url}`);
 
-                const response = await fetch(url);
+                const response = await fetchWithTimeout(url);
                 if (!response.ok) throw new Error(`API error: ${response.status}`);
 
                 // Accept either an array response or an object { grid: [...] }

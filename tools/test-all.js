@@ -30,35 +30,39 @@ async function main() {
   const timeWindowExit = await runCmd('Time Window API Test', 'node', ['tools/test-timewindow-api.js'], { cwd: rootDir });
   failures += timeWindowExit ? 1 : 0;
 
-  // 3) Run positions per hour test
+  // 3) Run API endpoints test
+  const apiEndpointsExit = await runCmd('API Endpoints Test', 'node', ['tools/test-api-endpoints.js'], { cwd: rootDir });
+  failures += apiEndpointsExit ? 1 : 0;
+
+  // 4) Run positions per hour test
   const positionsPerHourExit = await runCmd('Positions Per Hour Test', 'node', ['tools/test-positions-per-hour.js'], { cwd: rootDir });
   failures += positionsPerHourExit ? 1 : 0;
 
-  // 4) Run track API test
+  // 5) Run track API test
   const trackApiExit = await runCmd('Track API Test', 'node', ['tools/test-track-api.js'], { cwd: rootDir });
   failures += trackApiExit ? 1 : 0;
 
-  // 5) Run squawk API test
+  // 6) Run squawk API test
   const squawkApiExit = await runCmd('Squawk API Test', 'node', ['tools/test-squawk-api.js'], { cwd: rootDir });
   failures += squawkApiExit ? 1 : 0;
 
-  // 6) Run logo server test
+  // 7) Run logo server test
   const logoServerExit = await runCmd('Logo Server Test', 'node', ['tools/test-logo-server.js'], { cwd: rootDir });
   failures += logoServerExit ? 1 : 0;
 
-  // 7) Run SVG icons test
+  // 8) Run SVG icons test
   const svgIconsExit = await runCmd('SVG Icons Test', 'node', ['tools/test-svg-icons.js'], { cwd: rootDir });
   failures += svgIconsExit ? 1 : 0;
 
-  // 8) Run Leaflet Puppeteer full harness (select overlays, collect popups, auto-check hexes)
+  // 9) Run Leaflet Puppeteer full harness (select overlays, collect popups, auto-check hexes)
   const leafFullOut = path.join('screenshots', 'testplan', 'leaflet-test-full-' + Date.now().toString());
   // Skip overlay persistence checks for now (feature pending)
   const leafFullExit = await runCmd('Leaflet Puppeteer Full Harness', 'node', ['tools/leaflet-test.js', 'http://localhost:3002/heatmap-leaflet.html', leafFullOut, '--select-overlays', '--collect-popups', "--ignore-console=mesonet.agron.iastate.edu/cache/tile.py/.*sfc_analysis/.*", "--ignore-console=http://localhost:3002/api/v2logos/.*"], { cwd: rootDir, env: { ...process.env, SKIP_OVERLAY_PERSISTENCE: '1' } });
   failures += leafFullExit ? 1 : 0;
 
-  // 3) Python test suite (integration, endpoint and all-scripts) - detect python if present
+  // 10) Python test suite (integration, endpoint and all-scripts) - detect python if present
 
-  // 4) On Windows run the Python-based test script (cross-platform)
+  // 11) On Windows run the Python-based test script (cross-platform)
   const pythonCmds = ['python3', 'python'];
   let pythonCmd = null;
   const { execSync } = require('child_process');

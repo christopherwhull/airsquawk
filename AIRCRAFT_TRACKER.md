@@ -1,5 +1,7 @@
 # Aircraft Tracker
 
+> **⚠️ DEPRECATED**: The `aircraft-tracker.py` file has been renamed to `aircraft_tracker.py` to follow Python naming conventions. The old filename now shows a deprecation warning.
+
 Python script that monitors PiAware aircraft data and uploads to S3/MinIO for the Aircraft Dashboard.
 
 ## Features
@@ -53,32 +55,32 @@ docker run -p 9000:9000 -p 9001:9001 minio/minio server /data --console-address 
 
 Basic usage with defaults from `config.json`:
 ```bash
-python aircraft-tracker.py
+python aircraft_tracker.py
 ```
 
 Enable TSDB writes to InfluxDB 3:
 ```bash
-python aircraft-tracker.py --enable-tsdb
+python aircraft_tracker.py --enable-tsdb
 ```
 
 Specify custom PiAware server:
 ```bash
-python aircraft-tracker.py --piaware-url http://192.168.1.100:8080
+python aircraft_tracker.py --piaware-url http://192.168.1.100:8080
 ```
 
 Override S3 credentials:
 ```bash
-python aircraft-tracker.py --s3-access-key mykey --s3-secret-key mysecret
+python aircraft_tracker.py --s3-access-key mykey --s3-secret-key mysecret
 ```
 
 Read-only mode (no writes):
 ```bash
-python aircraft-tracker.py --read-only
+python aircraft_tracker.py --read-only
 ```
 
 Test run (2 minutes or 100 updates):
 ```bash
-python aircraft-tracker.py --enable-tsdb --test-run
+python aircraft_tracker.py --enable-tsdb --test-run
 ```
 
 ## Configuration
@@ -105,7 +107,7 @@ The script reads S3 credentials from `config.json` by default, which can be over
 - `--disable-s3` - Disable S3 uploads
 - `--test-run` - Run for a few iterations and exit
 
-Run `python aircraft-tracker.py --help` for complete options.
+Run `python aircraft_tracker.py --help` for complete options.
 
 ## How It Works
 

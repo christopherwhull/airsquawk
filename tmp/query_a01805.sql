@@ -1,0 +1,1 @@
+SELECT time, "registration" FROM aircraft_positions_v2 WHERE "icao" = 'a01805' ORDER BY time ASC LIMIT 1;

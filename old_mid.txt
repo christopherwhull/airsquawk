@@ -1,0 +1,203 @@
+                // Process current positions in small async chunks to yield
+                const chunkSize = 200;
+                for (let i = 0; i < positions.length; i += chunkSize) {
+                    const slice = positions.slice(i, i + chunkSize);
+                    for (const p of slice) {
+                        try {
+                            const lat = p.lat ?? p.Latitude ?? p.latitude;
+                            const lon = p.lon ?? p.Longitude ?? p.longitude;
+                            if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+                            const hex = (p.hex || '').toLowerCase();
+
+                            // Calculate vertical rate for color coding
+                            let verticalRate = 0;
+                            try {
+                                const alt = p.alt || p.altitude || p.Alt || p.Altitude || null;
+                                if (alt !== null && typeof alt === 'number') {
+                                    const prevData = verticalRateCache.get(hex);
+                                    if (prevData) {
+                                        const timeDiff = (now - prevData.timestamp) / 1000;
+                                        if (timeDiff > 30 && timeDiff < 300) {
+                                            const altDiff = alt - prevData.altitude;
+                                            verticalRate = (altDiff / timeDiff) * 60;
+                                        }
+                                    }
+                                    verticalRateCache.set(hex, { altitude: alt, timestamp: now });
+                                }
+                            } catch (e) {}
+
+                            const existingMarkerData = liveMarkers.get(hex);
+                            if (existingMarkerData) {
+                                existingMarkerData.marker.setLatLng([lat, lon]);
+                                const prevLastSeen = existingMarkerData.lastSeen;
+                                if (!p.timestamp && prevLastSeen) { try { p.timestamp = prevLastSeen; } catch (e) {} }
+                                existingMarkerData.marker._posData = p;
+                                existingMarkerData.lastSeen = now;
+                                existingMarkerData.seenInUpdate = true;
+
+                                const tooltipHtml = buildHoverTooltipHTML(p);
+                                try { existingMarkerData.marker.getTooltip().setContent(tooltipHtml); } catch (e) {}
+                                try { existingMarkerData.marker.getPopup().setContent(tooltipHtml); } catch (e) {}
+
+                                try {
+                                    const aircraftInfo = { manufacturer: p.manufacturer || p.airline || null, typecode: p.aircraft_type || null };
+                                    if (aircraftInfo.typecode) {
+                                        const track = p.heading || p.track || p.course || 0;
+                                        const rot = track;
+                                        const newIcon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                        existingMarkerData.marker.setIcon(newIcon);
+                                    }
+                                } catch (e) {}
+                            } else {
+                                let icon;
+                                const track = p.heading || p.track || p.course || 0;
+                                const rot = track;
+                                try {
+                                    const aircraftInfo = { manufacturer: p.manufacturer || p.airline || null, typecode: p.aircraft_type || null };
+                                    icon = createAircraftLogoIcon(aircraftInfo, rot, 50, verticalRate);
+                                } catch (e) {
+                                    let fallbackColor = '#ff3300';
+                                    if (verticalRate > 500) fallbackColor = '#00ff00';
+                                    else if (verticalRate < -300) fallbackColor = '#ff0000';
+                                    icon = createAircraftIcon(fallbackColor, 50, rot);
+                                }
+
+                                const marker = L.marker([lat, lon], { icon, pane: 'livePane', zIndexOffset: 1000 });
+                                const tooltipHtml = buildHoverTooltipHTML(p);
+                                marker.bindTooltip(tooltipHtml, { direction: 'top', offset: [0, -10], sticky: true });
+                                marker.bindPopup(tooltipHtml);
+
+                                try {
+                                    const v = p.sqk || p.squawk || p.transponder || p.transponder_code || p.squawk_code || null;
+                                    if (v) { p.sqk = v; p.squawk = p.squawk || v; }
+                                    else if (lastSquawk.has(hex)) { const ls = lastSquawk.get(hex); if (ls) { p.sqk = ls; p.squawk = p.squawk || ls; } }
+                                } catch (e) {}
+                                try { lastPositions.set(hex, [[lat, lon]]); } catch (e) {}
+
+                                if (!p.timestamp) p.timestamp = now;
+                                marker._posData = p;
+
+                                liveLayer.addLayer(marker);
+                                liveMarkers.set(hex, { marker, lastSeen: now, seenInUpdate: true });
+                            }
+
+                            // Maintain last positions and trails (same logic as before)
+                            try {
+                                const arr = lastPositions.get(hex) || [];
+                                const last = arr.length ? arr[arr.length - 1] : null;
+                                if (!last || last[0] !== lat || last[1] !== lon) {
+                                    arr.push([lat, lon]);
+                                    if (arr.length > LAST_POSITIONS_COUNT) arr.splice(0, arr.length - LAST_POSITIONS_COUNT);
+                                    lastPositions.set(hex, arr);
+                                }
+
+                                // Update live tail polyline
+                                const pts = (lastPositions.get(hex) || []).slice();
+                                if (pts.length >= 2) {
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { tr.setLatLngs(pts); } catch (e) {}
+                                    } else {
+                                        const tr = L.polyline(pts, { color: '#00ffff', weight: 2, opacity: 0.7, pane: 'livePane', interactive: false });
+                                        liveTrails.set(hex, tr);
+                                        liveLayer.addLayer(tr);
+                                    }
+
+                                    // Incrementally update live track group and long track group (append new point)
+                                    try {
+                                        if (liveTrackGroups.has(hex)) {
+                                            const group = liveTrackGroups.get(hex);
+                                            const layers = group.getLayers().filter(l => l instanceof L.Polyline);
+                                            const lastPoly = layers.length ? layers[layers.length - 1] : null;
+                                            const newPoint = [lat, lon];
+                                            const segColor = getVerticalRateColor(verticalRate || 0);
+                                            if (lastPoly) {
+                                                const lastColor = lastPoly.options && lastPoly.options.color ? lastPoly.options.color : null;
+                                                if (lastColor === segColor) {
+                                                    try { lastPoly.addLatLng(newPoint); } catch (e) {}
+                                                } else {
+                                                    try {
+                                                        const lastLatLngs = lastPoly.getLatLngs();
+                                                        const prev = lastLatLngs && lastLatLngs.length ? lastLatLngs[lastLatLngs.length - 1] : null;
+                                                        if (prev) {
+                                                            const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                                            group.addLayer(poly);
+                                                            if (!liveTracksLayer.hasLayer(group)) liveTracksLayer.addLayer(group);
+                                                        }
+                                                    } catch (e) {}
+                                                }
+                                            } else {
+                                                const prev = (lastPositions.get(hex) && lastPositions.get(hex).length > 1) ? lastPositions.get(hex)[lastPositions.get(hex).length - 2] : null;
+                                                if (prev) {
+                                                    try {
+                                                        const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.9, pane: 'livePane', interactive: false });
+                                                        group.addLayer(poly);
+                                                        if (!liveTracksLayer.hasLayer(group)) liveTracksLayer.addLayer(group);
+                                                        liveTrackGroups.set(hex, group);
+                                                    } catch (e) {}
+                                                }
+                                            }
+                                        }
+
+                                        // Also update any long-track (historical) group by appending if recent
+                                        try {
+                                            if (longTrackGroups.has(hex)) {
+                                                const lg = longTrackGroups.get(hex);
+                                                const layers = lg.getLayers().filter(l => l instanceof L.Polyline);
+                                                const lastPoly = layers.length ? layers[layers.length - 1] : null;
+                                                const newPoint = [lat, lon];
+                                                const segColor = getVerticalRateColor(verticalRate || 0);
+                                                if (lastPoly) {
+                                                    const lastColor = lastPoly.options && lastPoly.options.color ? lastPoly.options.color : null;
+                                                    if (lastColor === segColor) {
+                                                        try { lastPoly.addLatLng(newPoint); } catch (e) {}
+                                                    } else {
+                                                        try {
+                                                            const lastLatLngs = lastPoly.getLatLngs();
+                                                            const prev = lastLatLngs && lastLatLngs.length ? lastLatLngs[lastLatLngs.length - 1] : null;
+                                                            if (prev) {
+                                                                const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false });
+                                                                lg.addLayer(poly); if (!longTracksLayer.hasLayer(lg)) longTracksLayer.addLayer(lg);
+                                                            }
+                                                        } catch (e) {}
+                                                    }
+                                                } else {
+                                                    const prev = (lastPositions.get(hex) && lastPositions.get(hex).length > 1) ? lastPositions.get(hex)[lastPositions.get(hex).length - 2] : null;
+                                                    if (prev) {
+                                                        try { const poly = L.polyline([prev, newPoint], { color: segColor, weight: 3, opacity: 0.95, pane: 'persistentPane', interactive: false }); lg.addLayer(poly); if (!longTracksLayer.hasLayer(lg)) longTracksLayer.addLayer(lg); } catch (e) {}
+                                                    }
+                                                }
+                                            }
+                                        } catch (e) {}
+                                    } catch (e) {}
+                                }
+
+                                else {
+                                    // remove any existing short trail if we don't have at least two points
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
+                                        liveTrails.delete(hex);
+                                    }
+                                }
+                            } catch (e) {}
+                        }
+
+                        // Remove markers that weren't seen in this update and have timed out
+                        for (const [hex, markerData] of liveMarkers.entries()) {
+                            if (!markerData.seenInUpdate && (now - markerData.lastSeen > TIMEOUT_MS)) {
+                                try {
+                                    liveLayer.removeLayer(markerData.marker);
+                                    liveMarkers.delete(hex);
+                                    // Remove any short trail polyline for this hex
+                                    if (liveTrails.has(hex)) {
+                                        const tr = liveTrails.get(hex);
+                                        try { liveLayer.removeLayer(tr); if (map.hasLayer(tr)) map.removeLayer(tr); } catch (e) {}
+                                        liveTrails.delete(hex);
+                                    }
+                                } catch (e) {
+                                    console.warn('Failed to remove timed out marker for', hex, e);
+                                }
+                            }
+                        }
+

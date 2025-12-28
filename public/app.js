@@ -982,6 +982,24 @@ function cleanupExpiredLogoCache() {
 }
 
 // More granular connection/error handlers to help debugging connectivity
+socket.on('connect', () => {
+    console.info('Socket connected successfully');
+    const el = document.getElementById('connection-status');
+    if (el) {
+        el.textContent = '● Connected';
+        el.className = 'status-connected';
+    }
+});
+
+socket.on('disconnect', (reason) => {
+    console.warn('Socket disconnected:', reason);
+    const el = document.getElementById('connection-status');
+    if (el) {
+        el.textContent = '● Disconnected';
+        el.className = 'status-disconnected';
+    }
+});
+
 socket.on('connect_error', (err) => {
     console.error('Socket connect_error:', err);
     const el = document.getElementById('connection-status');
@@ -1019,6 +1037,7 @@ socket.on('connect_timeout', () => {
 });
 
 socket.on('liveUpdate', (data) => {
+    console.log('Received liveUpdate:', data);
     updateLiveStats(data);
     addLiveUpdateToBuffer(data);
     scheduleLiveTableUpdate();
@@ -1213,13 +1232,24 @@ function updateAircraftTable(aircraft) {
         }
         // Set data attribute for row identification
         row.dataset.hex = ac.hex;
-        // Color vertical speed
-        let vertRate = ac.baro_rate || 0;
-        let vertRateDisplay = vertRate === undefined || vertRate === null ? 'N/A' : vertRate;
+        // Color vertical speed (prefer baro_rate, fall back to vert_rate if present)
+        const verticalRateValue = (typeof ac.baro_rate === 'number' && !Number.isNaN(ac.baro_rate))
+            ? ac.baro_rate
+            : (typeof ac.vert_rate === 'number' && !Number.isNaN(ac.vert_rate) ? ac.vert_rate : null);
+
+        let vertRateDisplay = 'N/A';
         let vertRateColor = '';
-        if (typeof vertRate === 'number') {
-            if (vertRate < 0) vertRateColor = 'color:red;font-weight:bold;';
-            else if (vertRate > 0) vertRateColor = 'color:green;font-weight:bold;';
+        if (verticalRateValue !== null) {
+            const roundedRate = Math.round(verticalRateValue);
+            if (roundedRate > 0) {
+                vertRateDisplay = `+${roundedRate}`;
+                vertRateColor = 'color:#4caf50;font-weight:bold;';
+            } else if (roundedRate < 0) {
+                vertRateDisplay = `${roundedRate}`;
+                vertRateColor = 'color:#f44336;font-weight:bold;';
+            } else {
+                vertRateDisplay = '0';
+            }
         }
         
         // Get airline name from flight callsign
@@ -1262,7 +1292,21 @@ function updateAircraftTable(aircraft) {
         
         // Create cells individually for better control
         const hexCell = document.createElement('td');
-        hexCell.textContent = ac.hex;
+        const acHexVal = ac.icao || ac.hex || '';
+        if (acHexVal) {
+            if (ac.flight) {
+                const a = document.createElement('a');
+                a.href = `https://flightaware.com/live/flight/${encodeURIComponent(ac.flight)}`;
+                a.target = '_blank';
+                a.rel = 'noopener noreferrer';
+                a.textContent = acHexVal;
+                hexCell.appendChild(a);
+            } else {
+                hexCell.textContent = acHexVal;
+            }
+        } else {
+            hexCell.textContent = '';
+        }
         
         const flightCell = document.createElement('td');
         flightCell.textContent = ac.flight || 'N/A';
@@ -1348,12 +1392,15 @@ function updateAircraftTable(aircraft) {
         const altCell = document.createElement('td');
         altCell.textContent = ac.alt_baro || 'N/A';
         
-        const speedCell = document.createElement('td');
-        speedCell.textContent = ac.gs || 'N/A';
-        
         const vertRateCell = document.createElement('td');
         vertRateCell.style.cssText = vertRateColor;
         vertRateCell.textContent = vertRateDisplay;
+        if (verticalRateValue !== null) {
+            vertRateCell.dataset.sortValue = verticalRateValue;
+        }
+
+        const speedCell = document.createElement('td');
+        speedCell.textContent = ac.gs || 'N/A';
         
         const latCell = document.createElement('td');
         latCell.textContent = ac.lat || 'N/A';
@@ -1382,8 +1429,8 @@ function updateAircraftTable(aircraft) {
         row.appendChild(bodyTypeCell);
         row.appendChild(squawkCell);
         row.appendChild(altCell);
-        row.appendChild(speedCell);
         row.appendChild(vertRateCell);
+        row.appendChild(speedCell);
         row.appendChild(latCell);
         row.appendChild(lonCell);
         row.appendChild(messagesCell);
@@ -1796,8 +1843,23 @@ async function loadAirlineFlights(airlineCode, airlineName, windowVal) {
             
             const hexCell = document.createElement('td');
             hexCell.style.color = '#bbb';
-            hexCell.textContent = airlineCode;
-            hexCell.setAttribute('data-sort-value', airlineCode);
+            const flightHex = flight.icao || flight.hex || '';
+            if (flightHex) {
+                if (flight.callsign) {
+                    const a = document.createElement('a');
+                    a.href = `https://flightaware.com/live/flight/${encodeURIComponent(flight.callsign)}`;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    a.textContent = flightHex;
+                    hexCell.appendChild(a);
+                } else {
+                    hexCell.textContent = flightHex;
+                }
+                hexCell.setAttribute('data-sort-value', flightHex);
+            } else {
+                hexCell.textContent = '';
+                hexCell.setAttribute('data-sort-value', '');
+            }
             
             const regCell = document.createElement('td');
             regCell.style.color = '#bbb';
@@ -3381,57 +3443,54 @@ async function loadSquawkTransitions(hoursBack = null) {
             try { setComputedRangeUI('squawk', startTime, endTime, isCustomRange); } catch (e) {}
         }
 
-        // Helper to format transitions
+        // Helper to format transitions as table rows
         const formatTransition = (t) => {
             if (!t) return '';
             const dt = new Date(t.timestamp || Date.now());
             const timeStr = dt.toLocaleString('en-US', { 
                 month: '2-digit', 
-                day: '2-digit', 
+                day: '2-digit',
+                year: 'numeric',
                 hour: '2-digit', 
                 minute: '2-digit',
+                second: '2-digit',
                 hour12: false 
             });
             const reg = t.registration || t.hex || 'Unknown';
-            const flightText = t.flight ? ` (${t.flight})` : ' (N/A)';
-            const typeText = t.type ? ` [${t.type}]` : '';
-            const typeDesc = t.aircraft_model ? ` - ${t.aircraft_model}` : '';
-            const timeSince = t.minutesSinceLast ? ` <span style="color: #999; font-size: 11px;">(${t.minutesSinceLast} min)</span>` : '';
-            const altText = t.altitude ? `${t.altitude.toLocaleString()} ft` : 'N/A';
+            const flight = t.flight || 'N/A';
+            const type = t.type || 'N/A';
+            const manufacturer = t.manufacturer || 'N/A';
+            const altText = t.altitude ? t.altitude.toLocaleString() : 'N/A';
+            const minutesSince = t.minutesSinceLast || 0;
             
             // Airline info
             const airlineCode = t.airlineCode || '';
             const airlineName = t.airlineName || '';
             const airlineDisplay = airlineName ? `${airlineCode} - ${airlineName}` : (airlineCode || 'N/A');
             
-            return `<li style="margin: 8px 0; padding: 12px; background: #1e1e1e; border-radius: 4px; border-left: 3px solid #42a5f5; color: #e0e0e0;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="color: #999; font-size: 12px;">${timeStr}</span> | 
-                        <strong style="color: #fff;">${reg}</strong>${flightText}${typeText}${typeDesc}
-                    </div>
-                    <div style="font-weight: bold; color: #42a5f5;">
-                        ${t.from} → ${t.to}${timeSince}
-                    </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: #bbb; margin-top: 8px;">
-                    <div>
-                        <span style="color: #888;">Flight:</span> <strong style="color: #fff;">${t.flight || 'N/A'}</strong>
-                    </div>
-                    <div>
-                        <span style="color: #888;">Type:</span> <strong style="color: #fff;">${t.type || 'N/A'}</strong>
-                    </div>
-                    <div>
-                        <span style="color: #888;">Manufacturer:</span> <strong style="color: #fff;">${t.manufacturer || 'N/A'}</strong>
-                    </div>
-                    <div>
-                        <span style="color: #888;">Airline:</span> <strong style="color: #fff;">${airlineDisplay}</strong>
-                    </div>
-                    <div>
-                        <span style="color: #888;">Altitude:</span> <strong style="color: #fff;">${altText}</strong>
-                    </div>
-                </div>
-            </li>`;
+                        const hexVal = t.hex || t.icao || '';
+                        let hexCell = 'N/A';
+                        if (hexVal) {
+                            if (t.flight) {
+                                hexCell = `<a href="https://flightaware.com/live/flight/${encodeURIComponent(t.flight)}" target="_blank" rel="noopener noreferrer">${hexVal}</a>`;
+                            } else {
+                                hexCell = `${hexVal}`;
+                            }
+                        }
+
+            return `<tr data-timestamp="${t.timestamp || 0}" data-hex="${t.hex || ''}" data-flight="${flight}" data-reg="${reg}" data-type="${type}" data-manufacturer="${manufacturer}" data-airline="${airlineDisplay}" data-from="${t.from}" data-to="${t.to}" data-altitude="${t.altitude || 0}" data-minutes="${minutesSince}">
+                <td>${timeStr}</td>
+                <td>${hexCell}</td>
+                <td>${flight}</td>
+                <td>${reg}</td>
+                <td>${type}</td>
+                <td>${manufacturer}</td>
+                <td>${airlineDisplay}</td>
+                <td>${t.from}</td>
+                <td>${t.to}</td>
+                <td>${altText}</td>
+                <td>${minutesSince}</td>
+            </tr>`;
         };
 
         // Categorize transitions
@@ -3475,7 +3534,7 @@ async function loadSquawkTransitions(hoursBack = null) {
         const specialList = document.getElementById('special-transitions');
         const otherList = document.getElementById('other-transitions');
         
-        const emptyMessage = '<li style="color: #999; padding: 20px; text-align: center; background: #2a2a2a; border-radius: 4px;">No transitions in this category</li>';
+        const emptyMessage = '<tr><td colspan="11" style="color: #999; padding: 20px; text-align: center; background: #2a2a2a;">No transitions in this category</td></tr>';
         
         if (vfrList) {
             vfrList.innerHTML = vfr.length > 0 ? vfr.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(formatTransition).join('') : emptyMessage;
@@ -3489,10 +3548,22 @@ async function loadSquawkTransitions(hoursBack = null) {
         if (specialList) {
             specialList.innerHTML = special.length > 0 ? special.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(formatTransition).join('') : emptyMessage;
         }
-            if (otherList) {
+        if (otherList) {
             otherList.innerHTML = other.length > 0 ? other.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).map(formatTransition).join('') : emptyMessage;
         }
-            try { hideSpinnerForTab('squawk'); } catch (e) {}
+        
+        // Make tables sortable
+        try {
+            makeSortable(document.getElementById('vfr-transitions-table'));
+            makeSortable(document.getElementById('ifr-low-transitions-table'));
+            makeSortable(document.getElementById('ifr-high-transitions-table'));
+            makeSortable(document.getElementById('special-transitions-table'));
+            makeSortable(document.getElementById('other-transitions-table'));
+        } catch (e) {
+            console.warn('Failed to make squawk tables sortable:', e);
+        }
+        
+        try { hideSpinnerForTab('squawk'); } catch (e) {}
             
     } catch (error) {
         console.error('Error loading squawk transitions:', error);

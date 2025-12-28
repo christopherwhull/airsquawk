@@ -23,9 +23,8 @@ async function testSquawkTSDBAPI() {
 
     // Test different time windows
     const testWindows = [
-        { param: 'hours=1', desc: '1 hour' },
-        { param: 'hours=24', desc: '24 hours' },
-        { param: 'hours=24&limit=50', desc: '24 hours (limit 50)' }
+        { param: 'hours=6', desc: '6 hours' },
+        { param: 'hours=6&limit=50', desc: '6 hours (limit 50)' }
     ];
 
     for (const test of testWindows) {

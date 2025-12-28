@@ -839,10 +839,36 @@
             const squawk = p.sqk || p.squawk || p.SQK || p.Squawk || p.transponder || p.transponder_code || p.squawk_code || (lastSquawk.has(hexKey) ? lastSquawk.get(hexKey) : '') || '';
             const reg = p.registration || p.Registration || p.reg || p.Reg || p.tail || '';
             const airline = p.airline || p.operator || p.operator_name || p.airline_name || p.airlineName || '';
-            // Altitude: accept alt, altitude, A lt variants, or max_alt_ft from batch
-            const rawAlt = (p.alt ?? p.altitude ?? p.Alt ?? p.Altitude ?? p.max_alt_ft ?? p.max_alt ?? p.alt_ft ?? '');
-            const altNum = Number(rawAlt);
-            const alt = (rawAlt !== '' && rawAlt != null && Number.isFinite(altNum)) ? `${altNum.toLocaleString()} ft` : (rawAlt || '');
+            // Altitude: accept many variants and convert meters to feet where provided
+            let altVal = null;
+            if (p.alt !== undefined) altVal = p.alt;
+            else if (p.altitude !== undefined) altVal = p.altitude;
+            else if (p.Alt !== undefined) altVal = p.Alt;
+            else if (p.Altitude !== undefined) altVal = p.Altitude;
+            else if (p.altitude_ft !== undefined) altVal = p.altitude_ft;
+            else if (p.max_alt_ft !== undefined) altVal = p.max_alt_ft;
+            else if (p.max_alt !== undefined) altVal = p.max_alt;
+            else if (p.alt_ft !== undefined) altVal = p.alt_ft;
+            else if (p.alt_baro !== undefined) altVal = p.alt_baro;
+            else if (p.altitude_m !== undefined) altVal = Number(p.altitude_m) * 3.28084;
+            else if (p.alt_m !== undefined) altVal = Number(p.alt_m) * 3.28084;
+            else altVal = '';
+            const altNum = Number(altVal);
+            let alt = '';
+            if (Number.isFinite(altNum)) {
+                alt = `${Math.round(altNum).toLocaleString()} ft`;
+            } else if (typeof altVal === 'string' && altVal.trim() !== '') {
+                const fl = altVal.trim().match(/^FL(\d+)$/i);
+                if (fl && fl[1]) {
+                    const flFeet = Number(fl[1]) * 100;
+                    if (Number.isFinite(flFeet)) alt = `${flFeet.toLocaleString()} ft`;
+                    else alt = altVal.trim();
+                } else {
+                    alt = altVal.trim();
+                }
+            } else {
+                alt = '';
+            }
             // Speed: accept gs, speed, groundSpeed, or max_speed_kt
             const rawSpeed = (p.gs ?? p.speed ?? p.groundSpeed ?? p.GS ?? p.max_speed_kt ?? p.speed_kt ?? '');
             const speedNum = Number(rawSpeed);
@@ -852,7 +878,19 @@
             const track = (trackVal !== '' && trackVal != null) ? trackVal : '';
             const lat = (p.lat || p.latitude || p.Lat) || '';
             const lon = (p.lon || p.longitude || p.Lon) || '';
-            const timeStr = p.timestamp ? (isNaN(Number(p.timestamp)) ? new Date(p.timestamp).toISOString() : new Date(Number(p.timestamp)).toISOString()) : '';
+            // Robust timestamp normalization for tests
+            function normalizeTimestamp(v) {
+                if (v === undefined || v === null || v === '') return null;
+                if (typeof v === 'number') return (v < 1e11) ? v * 1000 : v;
+                const nv = Number(v);
+                if (!Number.isNaN(nv)) return (nv < 1e11) ? nv * 1000 : nv;
+                const parsed = Date.parse(v);
+                if (!Number.isNaN(parsed)) return parsed;
+                return null;
+            }
+            const tsCandidate = (p.timestamp ?? p.ts ?? p.time ?? p.time_ts ?? p.time_utc ?? p.lastSeen ?? p.last_seen ?? p.t) || null;
+            const tsMs = normalizeTimestamp(tsCandidate);
+            const timeStr = tsMs ? new Date(tsMs).toISOString() : '';
             return `
                 <div style="min-width:200px">
                     <strong>${(p.hex||'').toUpperCase()}${callsign ? ' — ' + callsign : ''}</strong>
@@ -1022,7 +1060,7 @@
 
         // Create an aircraft logo icon (image) using known aircraft info.
         // `info` may contain `manufacturerLogo` (relative URL) or `manufacturer`/`aircraft_model`.
-        function createAircraftLogoIcon(info = {}, rotation = 0, size = 28) {
+        function createAircraftLogoIcon(info = {}, rotation = 0, size = 28, verticalRate = 0) {
             // Determine image source
             let src = null;
             try {
@@ -1031,9 +1069,19 @@
                 else if (info.aircraft_model && typeof info.aircraft_model === 'string') src = `/api/v2logos/${encodeURIComponent(info.aircraft_model.split(' ')[0]||'')}`;
             } catch (e) {}
             // Fallback to a small SVG if no image available
+            // Add glow/border style and background fill for climb/descend
+            let glowStyle = '';
+            let bgStyle = '';
+            try {
+                if (typeof verticalRate === 'number') {
+                    if (verticalRate > 500) { glowStyle = `box-shadow: 0 0 8px rgba(0, 255, 128, 0.6); border:2px solid rgba(0,200,80,0.5); border-radius:6px;`; bgStyle = `background-color: rgba(0,255,128,0.10); padding:2px; border-radius:6px;`; }
+                    else if (verticalRate < -300) { glowStyle = `box-shadow: 0 0 8px rgba(255,80,80,0.6); border:2px solid rgba(255,60,60,0.45); border-radius:6px;`; bgStyle = `background-color: rgba(255,80,80,0.10); padding:2px; border-radius:6px;`; }
+                    else { glowStyle = `border:2px solid transparent;`; bgStyle = ``; }
+                }
+            } catch (e) { glowStyle = `border:2px solid transparent;`; bgStyle = ``; }
             const imgHtml = src ? `<img src="${src}" alt="aircraft" style="width:${size}px;height:${size}px;object-fit:contain;display:block;border-radius:2px;"/>` : `
                 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path d="M21 11.5c0-.28-.22-.5-.5-.5h-6.79L12 4.21 10.29 5.92 11.5 7.12 8.75 9.88 7.34 9.5c-.14-.03-.28-.02-.41.04L4 10.5c-.44.14-.75.55-.75 1v1c0 .45.31.86.75 1l2.93.84c.13.04.27.06.41.04l1.41-.38L11.5 16.9 10.29 18.1 12 19.79l1.71-1.71H21.5c.28 0 .5-.22.5-.5v-5.08z" fill="#ff3300"/></svg>`;
-            const html = `<div style="transform: rotate(${rotation}deg); width: ${size}px; height:${size}px; display:flex; align-items:center; justify-content:center">${imgHtml}</div>`;
+            const html = `<div style="transform: rotate(${rotation}deg); width: ${size}px; height:${size}px; display:flex; align-items:center; justify-content:center; ${bgStyle} ${glowStyle}">${imgHtml}</div>`;
             return L.divIcon({ html, className: 'aircraft-logo-icon', iconSize: [size, size], iconAnchor: [size/2, size/2] });
         }
 
