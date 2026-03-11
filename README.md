@@ -11,6 +11,12 @@ Why it matters:
 
 ---
 
+Important Note as of March 1 2026. -
+
+The author does not authorize this software to be download, ran, consumed, updated, compiled in the states of California, New York, Colorado, or Illinoise because current law or purposed legistaltion is unclear on age verfication.  Any other state that requires OS age or user age entry is also not allowed for usage.  If you are under the age of 18 and using ADSB station monitoring software for tracking aircraft movements in the national airspace, I support your learning, I had to do this with a VHF radio and a paper map back in the day.     This application only shares the location of a PiAware Reciever to other coponets an signls clearly aviable to all age groups.    Any export of data is at the users request and matches other ADSB station and logging and tracking software.   The opperator of all aircraft is the ultimate desision maker on the data presented. 
+
+
+
 > Getting started (2 minutes)
 >
 > 1) Clone the repo and install dependencies
