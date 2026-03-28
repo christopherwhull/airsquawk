@@ -222,3 +222,4 @@ All notable changes to the Aircraft Dashboard project will be documented in this
 - Files changed: `public/app.js`, `public/loadHeatmap.js`, `public/style.css`, `public/heatmap-leaflet.html`, `tools/*` (Puppeteer tools and test runner), and added several new Jest tests for persistence and spinner UI.
 - LocalStorage keys: `positionsTimescale`, `leafletHeatmapSettings`, and `airlineDB-v1` relevant for persistence and test verification.
 - New environment variables for CI: `SKIP_OVERLAY_PERSISTENCE`, `SKIP_PERSISTENCE_TESTS`, `SKIP_POSITIONS_TIMESCALE_PERSISTENCE`.
+\n## [0.5.0] - 2025-12-09\n\n### Added\n- Initial release under the new irsquawk name. Includes all prior fixes and test harness improvements.\n\n### Changed\n- Repository renamed and package bumped to irsquawk@0.5.0.\n\n### Migration\n- Wiki content migrated into migration/wiki/. PRs/Issues imported as Issues for triage.\n
